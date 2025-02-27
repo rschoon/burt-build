@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Context;
 use clap::Parser;
 
+mod builder;
 mod file;
 
 fn read_burt_file(path: &Path) -> anyhow::Result<file::RootSection> {
@@ -24,7 +25,8 @@ fn main() -> anyhow::Result<()> {
 
     let burtfile = read_burt_file(&args.file)?; 
 
-    dbg!(burtfile);
+    let mut build = builder::Build::new();
+    build.build(&burtfile, "default")?;
 
     Ok(())
 }

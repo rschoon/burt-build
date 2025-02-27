@@ -26,12 +26,12 @@ pub enum Command {
 
 #[derive(Debug)]
 pub struct FromCommand {
-    src: String,
+    pub src: String,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct RunCommand {
-    cmd: RunCommandArgs,
+    pub cmd: RunCommandArgs,
 }
 
 #[derive(Debug, Eq, PartialEq)]

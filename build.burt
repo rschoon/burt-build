@@ -1,5 +1,0 @@
-
-main:
-    FROM debian:slim
-    RUN echo hello
-    invalid

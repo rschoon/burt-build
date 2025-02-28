@@ -1,4 +1,5 @@
 
+mod error;
 mod types;
 mod parse;
 

@@ -1,48 +1,48 @@
 
 use nom::branch::alt;
-use nom::bytes::complete::{escaped_transform, is_a, tag, take_while, take_while1};
+use nom::bytes::complete::{escaped_transform, is_a, tag, take_while1};
 use nom::character::complete::{alpha1, alphanumeric1, char, line_ending, multispace0, not_line_ending};
 use nom::combinator::{all_consuming, cut, eof, opt, recognize, value};
+use nom::error::context;
 use nom::multi::{many0_count, many1, many1_count, separated_list0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Finish, IResult, Parser as _};
 
 use super::types::*;
+use super::error::ParseError;
 
-fn some_space(input: &str) -> IResult<&str, &str> {
+type ParseResult<'a, T> = IResult<&'a str, T, ParseError<&'a str>>;
+
+fn some_space(input: &str) -> ParseResult<&str> {
     alt((is_a(" \t"), tag("\\\n"))).parse(input)
 }
 
-fn not_whitespace0(input: &str) -> IResult<&str, &str> {
-    take_while(|c: char| !c.is_ascii_whitespace()).parse(input)
-}
-
-fn not_whitespace1(input: &str) -> IResult<&str, &str> {
+fn not_whitespace1(input: &str) -> ParseResult<&str> {
     take_while1(|c: char| !c.is_ascii_whitespace()).parse(input)
 }
 
-fn space0(input: &str) -> IResult<&str, &str> {
+fn space0(input: &str) -> ParseResult<&str> {
     recognize(many0_count(some_space)).parse(input)
 }
 
-fn space1(input: &str) -> IResult<&str, &str> {
+fn space1(input: &str) -> ParseResult<&str> {
     recognize(many1_count(some_space)).parse(input)
 }
 
-fn comment(input: &str) -> IResult<&str, ()> {
+fn comment(input: &str) -> ParseResult<()> {
     (space0, tag("#"), opt(not_line_ending)).map(|_|()).parse(input)
 }
 
-fn nl_final_empty(input: &str) -> IResult<&str, &str> {
+fn nl_final_empty(input: &str) -> ParseResult<&str> {
     recognize((space0, opt(comment), eof)).parse(input)
 }
 
-fn nl(input: &str) -> IResult<&str, ()> {
+fn nl(input: &str) -> ParseResult<()> {
     let empty_lines = recognize(many1_count((space0, opt(comment), line_ending)));
     alt((recognize((empty_lines, recognize(opt(nl_final_empty)))), nl_final_empty)).map(|_|()).parse(input)
 }
 
-fn target_label(input: &str) -> IResult<&str, &str> {
+fn target_label(input: &str) -> ParseResult<&str> {
     // TODO: Allow additional characters (which unicode classes?)
     recognize(
         pair(
@@ -52,20 +52,20 @@ fn target_label(input: &str) -> IResult<&str, &str> {
       ).parse(input)
 }
 
-fn indented_block<'a, P, R>(parser: P) -> impl nom::Parser<&'a str, Output=Vec<R>, Error=nom::error::Error<&'a str>>
+fn indented_block<'a, P, R>(parser: P) -> impl nom::Parser<&'a str, Output=Vec<R>, Error=ParseError<&'a str>>
 where
-    P: nom::Parser<&'a str, Output=R, Error=nom::error::Error<&'a str>> + Clone,
+    P: nom::Parser<&'a str, Output=R, Error=ParseError<&'a str>> + Clone,
 {
     space1.flat_map(move |r| {
         separated_list1(tag(r), parser.clone())
     })
 }
 
-fn command_string(input: &str) -> IResult<&str, &str> {
+fn command_string(input: &str) -> ParseResult<&str> {
     recognize(many1_count(alt((some_space, not_whitespace1)))).parse(input)
 }
 
-fn string(input: &str) -> IResult<&str, String> {
+fn string(input: &str) -> ParseResult<String> {
     delimited(
         char('"'),
         escaped_transform(
@@ -81,7 +81,7 @@ fn string(input: &str) -> IResult<&str, String> {
     ).parse(input)
 }
 
-fn string_list(input: &str) -> IResult<&str, Vec<String>> {
+fn string_list(input: &str) -> ParseResult<Vec<String>> {
     preceded(
         char('['),
         cut(terminated(
@@ -90,7 +90,7 @@ fn string_list(input: &str) -> IResult<&str, Vec<String>> {
     ))).parse(input)
 }
 
-fn parse_from_command(input: &str) -> IResult<&str, FromCommand> {
+fn parse_from_command(input: &str) -> ParseResult<FromCommand> {
     (tag("FROM"), space1, not_whitespace1, nl).map(|r| {
         FromCommand {
             src: r.2.to_owned()
@@ -98,7 +98,7 @@ fn parse_from_command(input: &str) -> IResult<&str, FromCommand> {
     }).parse(input)
 }
 
-fn parse_run_command(input: &str) -> IResult<&str, RunCommand> {
+fn parse_run_command(input: &str) -> ParseResult<RunCommand> {
     let options = alt((
         string_list.map(RunCommandArgs::List),
         command_string.map(|r| RunCommandArgs::String(r.to_owned()))
@@ -111,19 +111,22 @@ fn parse_run_command(input: &str) -> IResult<&str, RunCommand> {
     }).parse(input)
 }
 
-fn parse_target_command(input: &str) -> IResult<&str, Command> {
+fn parse_target_command(input: &str) -> ParseResult<Command> {
     macro_rules! cmd {
         ($name:ident($type:ident), $func:path) => {
             nom::combinator::map($func, |s: $type| Command::$name(s))
         }
     }
-    alt((
-        cmd!(From(FromCommand), parse_from_command),
-        cmd!(Run(RunCommand), parse_run_command),
-    )).parse(input)
+    context(
+        "target command", 
+        cut(alt((
+            cmd!(From(FromCommand), parse_from_command),
+            cmd!(Run(RunCommand), parse_run_command),
+        )))
+    ).parse(input)
 }
 
-fn parse_target_section(input: &str) -> IResult<&str, TargetSection> {
+fn parse_target_section(input: &str) -> ParseResult<TargetSection> {
     let items = indented_block(parse_target_command).parse(input)?;
 
     Ok((items.0, TargetSection {
@@ -131,15 +134,17 @@ fn parse_target_section(input: &str) -> IResult<&str, TargetSection> {
     }))
 }
 
-fn parse_root_child(input: &str) -> IResult<&str, (String, TargetSection)> {
+fn parse_root_child(input: &str) -> ParseResult<(String, TargetSection)> {
     let with_prefix = terminated(tag("TARGET"), space1);
     let colon_end = (tag(":"), nl);
     let label = terminated(preceded((opt(nl), opt(with_prefix)), target_label), colon_end);
-    
-    (label.map(|s: &str| s.to_owned()), parse_target_section).parse(input)
+    context(
+        "target or other top level item",
+        (label.map(|s: &str| s.to_owned()), parse_target_section)
+    ).parse(input)
 }
 
-fn parse_root(input: &str) -> IResult<&str, RootSection> {
+fn parse_root(input: &str) -> ParseResult<RootSection> {
     preceded(opt(nl), many1(parse_root_child))
         .map(|r| {
             RootSection {
@@ -149,12 +154,8 @@ fn parse_root(input: &str) -> IResult<&str, RootSection> {
         .parse(input)
 }
 
-fn handle_parse_error(err: nom::error::Error<&str>) -> anyhow::Error {
-    anyhow::anyhow!("{:?}", err)
-}
-
 pub fn parse(input: &str) -> anyhow::Result<RootSection> {
-    let result = all_consuming(parse_root).parse(input).finish().map_err(handle_parse_error)?;
+    let result = all_consuming(parse_root).parse(input).finish().map_err(|e| e.extract_error(input))?;
     Ok(result.1)
 }
 
@@ -210,7 +211,7 @@ mod tests {
     #[test]
     fn test_indented_block_multiline() {
         let statement = |s| {
-            terminated(take_while(|c| c != ';'), tag(";\n")).parse(s)
+            terminated(nom::bytes::take_while(|c| c != ';'), tag(";\n")).parse(s)
         };
 
         assert_eq!(indented_block(statement).parse(" a\n b;\n"), Ok(("", vec!["a\n b"])));

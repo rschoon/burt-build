@@ -1,3 +1,4 @@
+
 use std::path::{Path, PathBuf};
 
 use anyhow::Context;
@@ -28,14 +29,17 @@ struct Args {
 enum Command {
     Build {
         targets: Vec<String>,
-    }
+    },
+    // alias for build
+    #[clap(external_subcommand)]
+    TopDefault(Vec<String>)
 }
 
 fn build_targets(burtfile: file::RootSection, targets: Vec<String>) -> anyhow::Result<()> {
     for target in targets {
-        if target.starts_with("+") {
+        if let Some(target) = target.strip_prefix('+') {
             let mut build = builder::Build::new();
-            build.build(&burtfile, &target[1..])?;
+            build.build(&burtfile, target)?;
         } else {
             anyhow::bail!("Unknown target {}", target);
         }
@@ -49,7 +53,8 @@ fn main() -> anyhow::Result<()> {
 
     let burtfile = read_burt_file(&args.file)?; 
     match args.command {
-        Command::Build { targets } => build_targets(burtfile, targets)
+        Command::Build { targets } => build_targets(burtfile, targets),
+        Command::TopDefault(targets) => build_targets(burtfile, targets),
     }
 }
 

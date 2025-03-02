@@ -1,6 +1,6 @@
 
 use nom::branch::alt;
-use nom::bytes::complete::{escaped_transform, is_a, tag, take_while1};
+use nom::bytes::complete::{escaped_transform, is_a, tag, take_until, take_while1};
 use nom::character::complete::{alpha1, alphanumeric1, char, line_ending, multispace0, not_line_ending};
 use nom::combinator::{all_consuming, cut, eof, opt, recognize, value};
 use nom::error::context;
@@ -19,6 +19,14 @@ fn some_space(input: &str) -> ParseResult<&str> {
 
 fn not_whitespace1(input: &str) -> ParseResult<&str> {
     take_while1(|c: char| !c.is_ascii_whitespace()).parse(input)
+}
+
+fn jinja_nonspace(input: &str) -> ParseResult<&str> {
+    let jinja_block1 = (tag("{{"), cut((take_until("}}"), tag("}}"))));
+    let jinja_block2 = (tag("{%"), cut((take_until("%}"), tag("%}"))));
+    let any_part = alt((recognize(jinja_block1), recognize(jinja_block2), not_whitespace1));
+
+    recognize(many1_count(any_part)).parse(input)
 }
 
 fn space0(input: &str) -> ParseResult<&str> {
@@ -62,10 +70,10 @@ where
 }
 
 fn command_string(input: &str) -> ParseResult<&str> {
-    recognize(many1_count(alt((some_space, not_whitespace1)))).parse(input)
+    recognize(many1_count(alt((some_space, jinja_nonspace)))).parse(input)
 }
 
-fn string(input: &str) -> ParseResult<String> {
+fn json_string(input: &str) -> ParseResult<String> {
     delimited(
         char('"'),
         escaped_transform(
@@ -85,7 +93,7 @@ fn string_list(input: &str) -> ParseResult<Vec<String>> {
     preceded(
         char('['),
         cut(terminated(
-            separated_list0(preceded(multispace0, char(',')), string),
+            separated_list0(preceded(multispace0, char(',')), json_string),
             preceded(multispace0, char(']'))
     ))).parse(input)
 }

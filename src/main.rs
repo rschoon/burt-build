@@ -1,11 +1,24 @@
 
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 
 mod builder;
 mod file;
+
+fn current_exe() -> &'static Path {
+    static CE: LazyLock<PathBuf> = LazyLock::new(|| {
+        if let Ok(p) = std::env::current_exe() {
+            p
+        } else {
+            PathBuf::from("burt")
+        }
+    });
+    &CE
+}
+
 
 fn read_burt_file(path: &Path) -> anyhow::Result<file::RootSection> {
     let file = std::fs::File::open(path)
@@ -29,6 +42,11 @@ struct Args {
 enum Command {
     Build {
         targets: Vec<String>,
+    },
+    #[clap(hide(true))]
+    InternalContainerCopy {
+        src: PathBuf,
+        dest: PathBuf,
     },
     // alias for build
     #[clap(external_subcommand)]
@@ -55,6 +73,9 @@ fn main() -> anyhow::Result<()> {
     match args.command {
         Command::Build { targets } => build_targets(burtfile, targets),
         Command::TopDefault(targets) => build_targets(burtfile, targets),
+        Command::InternalContainerCopy { src, dest } => {
+            builder::perform_container_copy(&src, &dest)
+        },
     }
 }
 

@@ -1,14 +1,23 @@
+
+use container::Container;
+
 use crate::file::{Command, RootSection};
 
-pub struct Build {
-    container: Option<String>,
-}
+mod artifact;
+mod container;
 
+pub(crate) use container::perform_container_copy;
+
+pub struct Build {
+    container: Option<container::Container>,
+    artifact_output: artifact::ArtifactStore
+}
 
 impl Build {
     pub fn new() -> Self {
         Self {
             container: None,
+            artifact_output: artifact::ArtifactStore::default(),
         }
     }
 
@@ -19,34 +28,53 @@ impl Build {
             self.build_command(command)?;
         }
 
-        println!("Result: {}", self.container.as_deref().unwrap_or("--"));
-
         Ok(())
     }
 
     fn build_command(&mut self, cmd: &Command) -> anyhow::Result<()> {
         match cmd {
             Command::From(f) => self.cmd_from(f),
-            Command::Run(r) => self.cmd_run(r)
+            Command::Run(r) => self.cmd_run(r),
+            Command::SaveArtifact(c) => self.cmd_save(c),
         }?;
 
         Ok(())
     }
 
     fn cmd_from(&mut self, f: &crate::file::FromCommand) -> anyhow::Result<()> {
-        let out = std::process::Command::new("buildah").arg("from").arg(&f.src).output()?;
-        self.container = Some(String::from_utf8(out.stdout.trim_ascii_end().to_vec())?);
+        self.container = Some(Container::create(&f.src)?);
         Ok(())
     }
 
     fn cmd_run(&mut self, r: &crate::file::RunCommand) -> anyhow::Result<()> {
-        let Some(container) = self.container.as_deref() else { return Err(anyhow::anyhow!("No container set yet")) };
+        let Some(container) = self.container.as_ref() else {
+            return Err(anyhow::anyhow!("No container"));
+        };
 
-        match &r.cmd {
-            crate::file::RunCommandArgs::List(items) => { std::process::Command::new("buildah").arg("run").arg(container).args(items).status()?; }
-            crate::file::RunCommandArgs::String(script) => { std::process::Command::new("buildah").arg("run").arg("--").arg(container).arg("/bin/sh").arg("-c").arg(script).status()?; }
+        let mut cmd = container.run();
+        cmd = match &r.cmd {
+            crate::file::RunCommandArgs::List(args) => { 
+                cmd.args(args)
+            },
+            crate::file::RunCommandArgs::String(script) => {
+                cmd.arg("/bin/sh").arg("-c").arg(script)
+            }
+        };
+
+        let result = cmd.status()?;
+        if !result.success() {
+            Err(anyhow::anyhow!("{}", result.code().unwrap_or(-1)))
+        } else {
+            Ok(())
         }
+    }
 
+    fn cmd_save(&mut self, r: &crate::file::SaveArtifactCommand) -> anyhow::Result<()> {
+        let Some(container) = self.container.as_ref() else {
+            return Err(anyhow::anyhow!("No container"));
+        };
+
+        self.artifact_output.save(container, &r.src, r.dest.as_deref().unwrap_or("/"))?;
         Ok(())
     }
 }

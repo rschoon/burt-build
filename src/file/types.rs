@@ -15,6 +15,7 @@ pub struct TargetSection {
 pub enum Command {
     From(FromCommand),
     Run(RunCommand),
+    SaveArtifact(SaveArtifactCommand),
 }
 
 #[derive(Debug)]
@@ -31,4 +32,10 @@ pub struct RunCommand {
 pub enum RunCommandArgs {
     List(Vec<String>),
     String(String),
+}
+
+#[derive(Debug)]
+pub struct SaveArtifactCommand {
+    pub src: String,
+    pub dest: Option<String>,
 }

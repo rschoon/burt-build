@@ -89,6 +89,10 @@ fn json_string(input: &str) -> ParseResult<String> {
     ).parse(input)
 }
 
+fn arg_string(input: &str) -> ParseResult<String> {
+    alt((json_string, not_whitespace1.map(|s| s.to_owned()))).parse(input)
+}
+
 fn string_list(input: &str) -> ParseResult<Vec<String>> {
     preceded(
         char('['),
@@ -119,6 +123,17 @@ fn parse_run_command(input: &str) -> ParseResult<RunCommand> {
     }).parse(input)
 }
 
+fn parse_save_artifact_command(input: &str) -> ParseResult<SaveArtifactCommand> {
+    let cmd_prefix = (tag("SAVE"), space1, tag("ARTIFACT"), space1);
+
+    (cmd_prefix, arg_string, opt(preceded(space1, arg_string)), nl).map(|r| {
+        SaveArtifactCommand {
+            src: r.1,
+            dest: r.2,
+        }
+    }).parse(input)
+}
+
 fn parse_target_command(input: &str) -> ParseResult<Command> {
     macro_rules! cmd {
         ($name:ident($type:ident), $func:path) => {
@@ -130,6 +145,7 @@ fn parse_target_command(input: &str) -> ParseResult<Command> {
         cut(alt((
             cmd!(From(FromCommand), parse_from_command),
             cmd!(Run(RunCommand), parse_run_command),
+            cmd!(SaveArtifact(SaveArtifactCommand), parse_save_artifact_command),
         )))
     ).parse(input)
 }

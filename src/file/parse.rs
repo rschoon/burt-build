@@ -123,6 +123,14 @@ fn parse_run_command(input: &str) -> ParseResult<RunCommand> {
     }).parse(input)
 }
 
+fn parse_workdir_command(input: &str) -> ParseResult<WorkDirCommand> {
+    (tag("WORKDIR"), space1, arg_string, nl).map(|r| {
+        WorkDirCommand {
+            path: r.2.into()
+        }
+    }).parse(input)
+}
+
 fn parse_save_artifact_command(input: &str) -> ParseResult<SaveArtifactCommand> {
     let cmd_prefix = (tag("SAVE"), space1, tag("ARTIFACT"), space1);
 
@@ -145,6 +153,7 @@ fn parse_target_command(input: &str) -> ParseResult<Command> {
         cut(alt((
             cmd!(From(FromCommand), parse_from_command),
             cmd!(Run(RunCommand), parse_run_command),
+            cmd!(WorkDir(WorkDirCommand), parse_workdir_command),
             cmd!(SaveArtifact(SaveArtifactCommand), parse_save_artifact_command),
         )))
     ).parse(input)

@@ -1,5 +1,5 @@
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug)]
 pub struct RootSection {
@@ -15,6 +15,7 @@ pub struct TargetSection {
 pub enum Command {
     From(FromCommand),
     Run(RunCommand),
+    WorkDir(WorkDirCommand),
     SaveArtifact(SaveArtifactCommand),
 }
 
@@ -26,6 +27,11 @@ pub struct FromCommand {
 #[derive(Debug, Eq, PartialEq)]
 pub struct RunCommand {
     pub cmd: RunCommandArgs,
+}
+
+#[derive(Debug)]
+pub struct WorkDirCommand {
+    pub path: PathBuf
 }
 
 #[derive(Debug, Eq, PartialEq)]

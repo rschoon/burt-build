@@ -38,6 +38,15 @@ impl Container {
             .arg(dest).status()?;
         Ok(())
     }
+
+    pub fn set_work_dir(&self, path: &Path) -> anyhow::Result<()> {
+        Command::new("buildah")
+            .arg("config")
+            .arg("--workingdir")
+            .arg(path)
+            .arg(&self.container).status()?;
+        Ok(())
+    }
 }
 
 pub struct CommandRun {

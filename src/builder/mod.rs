@@ -1,4 +1,6 @@
 
+use std::path::Path;
+
 use container::Container;
 
 use crate::file::{Command, RootSection};
@@ -6,7 +8,7 @@ use crate::file::{Command, RootSection};
 mod artifact;
 mod container;
 
-pub(crate) use container::perform_container_copy;
+pub(crate) use container::{perform_container_copy, perform_container_export};
 
 macro_rules! ensure_container {
     ($b:expr) => {
@@ -29,6 +31,10 @@ impl Build {
             container: None,
             artifact_output: artifact::ArtifactStore::default(),
         }
+    }
+
+    pub fn export_artifact<P: AsRef<Path>>(&mut self, path: P) -> anyhow::Result<()> {
+        self.artifact_output.export(path.as_ref())
     }
 
     pub fn build(&mut self, root_config: &RootSection, target: &str) -> anyhow::Result<()> {

@@ -1,4 +1,6 @@
 
+use std::path::Path;
+
 use super::container::Container;
 
 #[derive(Default)]
@@ -17,5 +19,13 @@ impl ArtifactStore {
             self.container = Some(Container::create("scratch")?);
         }
         Ok(self.container.as_ref().unwrap())
+    }
+
+    pub fn export(&mut self, path: &Path) -> anyhow::Result<()> {
+        if let Some(container) = self.container.as_ref() {
+            container.export(Path::new("/"), path)?;
+        }
+
+        Ok(())
     }
 }

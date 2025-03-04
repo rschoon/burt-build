@@ -1,4 +1,5 @@
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -31,7 +32,7 @@ fn read_burt_file(path: &Path) -> anyhow::Result<file::RootSection> {
 #[derive(Parser)]
 struct Args {
     /// source file
-    #[clap(short, long, default_value="build.burt")]
+    #[clap(short, long, default_value="build.burt", global=true)]
     file: PathBuf,
 
     #[command(subcommand)]
@@ -40,24 +41,38 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    Build {
-        targets: Vec<String>,
-    },
+    Build(BuildArgs),
     #[clap(hide(true))]
     InternalContainerCopy {
         src: PathBuf,
         dest: PathBuf,
     },
+    #[clap(hide(true))]
+    InternalExport {
+        path: PathBuf,
+    },
     // alias for build
     #[clap(external_subcommand)]
-    TopDefault(Vec<String>)
+    TopDefault(Vec<OsString>)
 }
 
-fn build_targets(burtfile: file::RootSection, targets: Vec<String>) -> anyhow::Result<()> {
-    for target in targets {
+#[derive(Debug, Parser)]
+struct BuildArgs {
+    #[clap(long, short('a'))]
+    artifact: bool,
+
+    targets: Vec<String>,  
+}
+
+fn build_targets(burtfile: file::RootSection, args: BuildArgs) -> anyhow::Result<()> {
+    for target in args.targets {
         if let Some(target) = target.strip_prefix('+') {
             let mut build = builder::Build::new();
             build.build(&burtfile, target)?;
+
+            if args.artifact {
+                build.export_artifact(".")?;
+            }
         } else {
             anyhow::bail!("Unknown target {}", target);
         }
@@ -71,11 +86,17 @@ fn main() -> anyhow::Result<()> {
 
     let burtfile = read_burt_file(&args.file)?; 
     match args.command {
-        Command::Build { targets } => build_targets(burtfile, targets),
-        Command::TopDefault(targets) => build_targets(burtfile, targets),
+        Command::Build(build_args) => build_targets(burtfile, build_args),
+        Command::TopDefault(args) => {
+            let build_args = BuildArgs::parse_from(args);
+            build_targets(burtfile, build_args)
+        },
         Command::InternalContainerCopy { src, dest } => {
             builder::perform_container_copy(&src, &dest)
         },
+        Command::InternalExport { path } => {
+            builder::perform_container_export(&path)
+        }
     }
 }
 

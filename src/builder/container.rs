@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 
 pub struct Container {
@@ -45,6 +45,28 @@ impl Container {
             .arg("--workingdir")
             .arg(path)
             .arg(&self.container).status()?;
+        Ok(())
+    }
+
+    pub fn export(&self, src: &Path, dest: &Path) -> anyhow::Result<()> {
+        let burt = crate::current_exe();
+        let mut child = Command::new("buildah")
+            .arg("unshare")
+            .arg("-m").arg(format!("PREFIX={}", &self.container))
+            .arg("--")
+            .arg(burt)
+            .arg("internal-export")
+            .arg(src)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .spawn()?;
+        
+        let stdout = child.stdout.take().unwrap();
+        let mut archive = tar::Archive::new(stdout);
+        archive.unpack(dest)?;
+
+        child.wait()?;
+
         Ok(())
     }
 }
@@ -93,16 +115,16 @@ fn copy_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()>
     Ok(())
 }
 
-pub(crate) fn perform_container_copy(src: &Path, dest: &Path) -> Result<(), anyhow::Error> {
-    fn make_path(name: &str, suffix: &Path) -> PathBuf {
-        let mut prefix = PathBuf::from(std::env::var_os(name).unwrap_or_else(|| "/".into()));
-        let suffix = suffix.strip_prefix("/").unwrap_or(suffix);
-        prefix.push(suffix);
-        prefix
-    }
+fn internal_container_path(name: &str, suffix: &Path) -> PathBuf {
+    let mut prefix = PathBuf::from(std::env::var_os(name).unwrap_or_else(|| "/".into()));
+    let suffix = suffix.strip_prefix("/").unwrap_or(suffix);
+    prefix.push(suffix);
+    prefix
+}
 
-    let src = make_path("PREFIX_SRC", src);
-    let mut dest = make_path("PREFIX_DEST", dest);
+pub(crate) fn perform_container_copy(src: &Path, dest: &Path) -> Result<(), anyhow::Error> {
+    let src = internal_container_path("PREFIX_SRC", src);
+    let mut dest = internal_container_path("PREFIX_DEST", dest);
 
     if dest.as_os_str().as_encoded_bytes().ends_with(b"/") {
         if let Some(filename) = src.file_name() {
@@ -120,6 +142,14 @@ pub(crate) fn perform_container_copy(src: &Path, dest: &Path) -> Result<(), anyh
         fs::copy(src, dest)?;
     }
 
+    Ok(())
+}
+
+pub(crate) fn perform_container_export(path: &Path) -> Result<(), anyhow::Error> {
+    let prefix = internal_container_path("PREFIX", path);
+    let mut tarb = tar::Builder::new(std::io::stdout());
+    tarb.append_dir_all("", prefix)?;
+    tarb.finish()?;
     Ok(())
 }
 

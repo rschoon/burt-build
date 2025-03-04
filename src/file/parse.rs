@@ -126,7 +126,7 @@ fn parse_run_command(input: &str) -> ParseResult<RunCommand> {
 fn parse_workdir_command(input: &str) -> ParseResult<WorkDirCommand> {
     (tag("WORKDIR"), space1, arg_string, nl).map(|r| {
         WorkDirCommand {
-            path: r.2.into()
+            path: r.2
         }
     }).parse(input)
 }

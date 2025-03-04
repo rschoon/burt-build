@@ -7,6 +7,7 @@ use crate::file::{Command, RootSection};
 
 mod artifact;
 mod container;
+mod template;
 
 pub(crate) use container::{perform_container_copy, perform_container_export};
 
@@ -22,7 +23,8 @@ macro_rules! ensure_container {
 
 pub struct Build {
     container: Option<container::Container>,
-    artifact_output: artifact::ArtifactStore
+    artifact_output: artifact::ArtifactStore,
+    environment: template::Environment
 }
 
 impl Build {
@@ -30,6 +32,7 @@ impl Build {
         Self {
             container: None,
             artifact_output: artifact::ArtifactStore::default(),
+            environment: template::Environment::new()
         }
     }
 
@@ -59,7 +62,8 @@ impl Build {
     }
 
     fn cmd_from(&mut self, f: &crate::file::FromCommand) -> anyhow::Result<()> {
-        self.container = Some(Container::create(&f.src)?);
+        let src = self.environment.render(&f.src)?;
+        self.container = Some(Container::create(&src)?);
         Ok(())
     }
 
@@ -68,10 +72,12 @@ impl Build {
 
         let mut cmd = container.run();
         cmd = match &r.cmd {
-            crate::file::RunCommandArgs::List(args) => { 
+            crate::file::RunCommandArgs::List(args) => {
+                let args = args.iter().map(|a| self.environment.render(a)).collect::<Result<Vec<_>, _>>()?;
                 cmd.args(args)
             },
             crate::file::RunCommandArgs::String(script) => {
+                let script = self.environment.render(script)?;
                 cmd.arg("/bin/sh").arg("-c").arg(script)
             }
         };
@@ -86,13 +92,16 @@ impl Build {
 
     fn cmd_work_dir(&mut self, r: &crate::file::WorkDirCommand) -> anyhow::Result<()> {
         let container = ensure_container!(self);
-        container.set_work_dir(&r.path)?;
+        let path = self.environment.render(&r.path)?;
+        container.set_work_dir(Path::new(&path))?;
         Ok(())
     }
 
     fn cmd_save(&mut self, r: &crate::file::SaveArtifactCommand) -> anyhow::Result<()> {
         let container = ensure_container!(self);
-        self.artifact_output.save(container, &r.src, r.dest.as_deref().unwrap_or("/"))?;
+        let src = self.environment.render(&r.src)?;
+        let dest = r.dest.as_deref().map(|p| self.environment.render(p)).transpose()?;
+        self.artifact_output.save(container, &src, dest.as_deref().unwrap_or("/"))?;
         Ok(())
     }
 }

@@ -1,5 +1,5 @@
 
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct RootSection {
@@ -31,7 +31,7 @@ pub struct RunCommand {
 
 #[derive(Debug)]
 pub struct WorkDirCommand {
-    pub path: PathBuf
+    pub path: String
 }
 
 #[derive(Debug, Eq, PartialEq)]

@@ -35,6 +35,10 @@ struct Args {
     #[clap(short, long, default_value="build.burt", global=true)]
     file: PathBuf,
 
+    /// export artifacts
+    #[clap(long, short('a'), global=true)]
+    artifact: bool,
+
     #[command(subcommand)]
     command: Command
 }
@@ -58,19 +62,16 @@ enum Command {
 
 #[derive(Debug, Parser)]
 struct BuildArgs {
-    #[clap(long, short('a'))]
-    artifact: bool,
-
     targets: Vec<String>,  
 }
 
-fn build_targets(burtfile: file::RootSection, args: BuildArgs) -> anyhow::Result<()> {
-    for target in args.targets {
+fn build_targets(burtfile: file::RootSection, targets: Vec<String>, export_artifacts: bool) -> anyhow::Result<()> {
+    for target in targets {
         if let Some(target) = target.strip_prefix('+') {
             let mut build = builder::Build::new();
             build.build(&burtfile, target)?;
 
-            if args.artifact {
+            if export_artifacts {
                 build.export_artifact(".")?;
             }
         } else {
@@ -86,10 +87,10 @@ fn main() -> anyhow::Result<()> {
 
     let burtfile = read_burt_file(&args.file)?; 
     match args.command {
-        Command::Build(build_args) => build_targets(burtfile, build_args),
-        Command::TopDefault(args) => {
-            let build_args = BuildArgs::parse_from(args);
-            build_targets(burtfile, build_args)
+        Command::Build(build_args) => build_targets(burtfile, build_args.targets, args.artifact),
+        Command::TopDefault(build_args) => {
+            let build_args = BuildArgs::parse_from(build_args);
+            build_targets(burtfile, build_args.targets, args.artifact)
         },
         Command::InternalContainerCopy { src, dest } => {
             builder::perform_container_copy(&src, &dest)

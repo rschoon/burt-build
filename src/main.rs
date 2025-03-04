@@ -88,7 +88,8 @@ fn main() -> anyhow::Result<()> {
     let burtfile = read_burt_file(&args.file)?; 
     match args.command {
         Command::Build(build_args) => build_targets(burtfile, build_args.targets, args.artifact),
-        Command::TopDefault(build_args) => {
+        Command::TopDefault(mut build_args) => {
+            build_args.insert(0, OsString::new());
             let build_args = BuildArgs::parse_from(build_args);
             build_targets(burtfile, build_args.targets, args.artifact)
         },

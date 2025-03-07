@@ -1,0 +1,7 @@
+[[run]]
+args = ["+hello"]
+
+###
+hello:
+    FROM debian:stable
+    RUN echo hello

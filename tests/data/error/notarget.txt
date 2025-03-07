@@ -1,0 +1,8 @@
+[[run]]
+args = ["+else"]
+status_code = 1
+
+###
+something:
+    FROM debian:stable
+    RUN echo hello

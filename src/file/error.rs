@@ -78,7 +78,7 @@ impl<T, E> nom::error::FromExternalError<T, E> for ParseError<T> {
 fn find_position(input: &str, pos: &str) -> (usize, usize) {
     let prefix = &input[..input.len()-pos.len()];
     let mut pos = 0;
-    let mut line = 0;
+    let mut line = 1;
     while let Some(next_nl) = prefix[pos..].find('\n') {
         line += 1;
         pos += next_nl + 1;

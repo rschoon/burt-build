@@ -4,7 +4,7 @@ use predicates::prelude::*;
 use rstest::rstest;
 use serde::Deserialize;
 use tempfile::TempDir;
-use std::{io::Read, path::PathBuf, process::Command};
+use std::{collections::HashMap, io::Read, path::{Path, PathBuf}, process::Command};
 
 #[derive(Debug, Deserialize)]
 struct TestData {
@@ -16,7 +16,20 @@ struct TestData {
 struct TestRun {
     args: Vec<String>,
     status_code: i32,
-    verify_files: Vec<PathBuf>,
+    verify_files: HashMap<PathBuf, PathBuf>,
+}
+
+fn show_file(path: &Path) {
+    let mut f = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Can't show {:?}: {}", path, e);
+            return;
+        }
+    };
+    let mut buffer = String::new();
+    f.read_to_string(&mut buffer).unwrap();
+    eprintln!("{:?}", buffer);
 }
 
 #[rstest]
@@ -51,11 +64,15 @@ fn main(
         let cmd_assert = command.assert();
         cmd_assert.code(predicate::eq(run.status_code));
 
-        for filename in &run.verify_files {
-            let filename = path.parent().unwrap().join(filename);
-            let result_file = temp_dir.path().join(filename.file_name().unwrap());
-            let predicate_file = predicate::path::eq_file(&filename);
-            assert!(predicate_file.eval(result_file.as_path()));
+        for (result_name, expect_name) in &run.verify_files {
+            let expect_file = path.parent().unwrap().join(expect_name);
+            let result_file = temp_dir.path().join(result_name);
+            let predicate_file = predicate::path::eq_file(&expect_file);
+            if !predicate_file.eval(result_file.as_path()) {
+                eprintln!("File contents {:?} and {:?} do not match!", &expect_file, &result_file);
+                show_file(&result_file);
+                panic!("Check failed!")
+            }
         }
     }
 }

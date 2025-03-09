@@ -60,6 +60,10 @@ fn target_label(input: &str) -> ParseResult<&str> {
       ).parse(input)
 }
 
+fn var_name(input: &str) -> ParseResult<&str> {
+    target_label(input)
+}
+
 fn indented_block<'a, P, R>(parser: P) -> impl nom::Parser<&'a str, Output=Vec<R>, Error=ParseError<&'a str>>
 where
     P: nom::Parser<&'a str, Output=R, Error=ParseError<&'a str>> + Clone,
@@ -102,10 +106,19 @@ fn string_list(input: &str) -> ParseResult<Vec<String>> {
     ))).parse(input)
 }
 
+fn command<'a, C, A, R1, R2>(cmd: C, args: A) -> impl nom::Parser<&'a str, Output=R2, Error=ParseError<&'a str>>
+where 
+    C: nom::Parser<&'a str, Output=R1, Error=ParseError<&'a str>>,
+    A: nom::Parser<&'a str, Output=R2, Error=ParseError<&'a str>>,
+{
+    let cmd = (cmd, space1);
+    delimited(cmd, cut(args), nl)
+}
+
 fn parse_from_command(input: &str) -> ParseResult<FromCommand> {
-    (tag("FROM"), space1, not_whitespace1, nl).map(|r| {
+    command(tag("FROM"), not_whitespace1).map(|r| {
         FromCommand {
-            src: r.2.to_owned()
+            src: r.to_owned()
         }
     }).parse(input)
 }
@@ -116,28 +129,52 @@ fn parse_run_command(input: &str) -> ParseResult<RunCommand> {
         command_string.map(|r| RunCommandArgs::String(r.to_owned()))
     ));
 
-    (tag("RUN"), space1, options, nl).map(|r| {
+    command(tag("RUN"),options).map(|cmd| {
         RunCommand {
-            cmd: r.2
+            cmd
         }
     }).parse(input)
 }
 
 fn parse_workdir_command(input: &str) -> ParseResult<WorkDirCommand> {
-    (tag("WORKDIR"), space1, arg_string, nl).map(|r| {
+    command(tag("WORKDIR"), jinja_nonspace).map(|r| {
         WorkDirCommand {
-            path: r.2
+            path: r.to_string()
+        }
+    }).parse(input)
+}
+
+fn parse_arg_command(input: &str) -> ParseResult<SetCommand> {
+    let value = preceded(tag("="), jinja_nonspace);
+    let args = (var_name, opt(value));
+
+    command(tag("ARG"), args).map(|r| {
+        SetCommand {
+            name: r.0.to_owned(),
+            value: r.1.map(|s| s.to_owned()),
+            default: true
+        }
+    }).parse(input)
+}
+
+fn parse_set_command(input: &str) -> ParseResult<SetCommand> {
+    command(tag("SET"), (var_name, tag("="), jinja_nonspace)).map(|r| {
+        SetCommand {
+            name: r.0.to_owned(),
+            value: Some(r.2.to_owned()),
+            default: false
         }
     }).parse(input)
 }
 
 fn parse_save_artifact_command(input: &str) -> ParseResult<SaveArtifactCommand> {
-    let cmd_prefix = (tag("SAVE"), space1, tag("ARTIFACT"), space1);
+    let cmd_prefix = (tag("SAVE"), space1, tag("ARTIFACT"));
+    let args = (arg_string, opt(preceded(space1, arg_string)));
 
-    (cmd_prefix, arg_string, opt(preceded(space1, arg_string)), nl).map(|r| {
+    command(cmd_prefix, args).map(|r| {
         SaveArtifactCommand {
-            src: r.1,
-            dest: r.2,
+            src: r.0,
+            dest: r.1,
         }
     }).parse(input)
 }
@@ -153,6 +190,8 @@ fn parse_target_command(input: &str) -> ParseResult<Command> {
         cut(alt((
             cmd!(From(FromCommand), parse_from_command),
             cmd!(Run(RunCommand), parse_run_command),
+            cmd!(Set(SetCommand), parse_arg_command),
+            cmd!(Set(SetCommand), parse_set_command),
             cmd!(WorkDir(WorkDirCommand), parse_workdir_command),
             cmd!(SaveArtifact(SaveArtifactCommand), parse_save_artifact_command),
         )))

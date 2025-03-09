@@ -17,11 +17,19 @@ pub enum Command {
     Run(RunCommand),
     WorkDir(WorkDirCommand),
     SaveArtifact(SaveArtifactCommand),
+    Set(SetCommand),
 }
 
 #[derive(Debug)]
 pub struct FromCommand {
     pub src: String,
+}
+
+#[derive(Debug)]
+pub struct SetCommand {
+    pub name: String,
+    pub value: Option<String>,
+    pub default: bool,
 }
 
 #[derive(Debug, Eq, PartialEq)]

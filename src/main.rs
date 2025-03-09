@@ -39,6 +39,10 @@ struct Args {
     #[clap(long, short('a'), global=true)]
     artifact: bool,
 
+    /// set build value
+    #[clap(long, short('D'), global=true)]
+    define: Vec<String>,
+
     #[command(subcommand)]
     command: Command
 }
@@ -65,10 +69,19 @@ struct BuildArgs {
     targets: Vec<String>,  
 }
 
-fn build_targets(burtfile: file::RootSection, targets: Vec<String>, export_artifacts: bool) -> anyhow::Result<()> {
+fn build_targets(burtfile: file::RootSection, targets: Vec<String>, export_artifacts: bool, defines: Vec<String>) -> anyhow::Result<()> {
     for target in targets {
         if let Some(target) = target.strip_prefix('+') {
             let mut build = builder::Build::new();
+
+            for define in &defines {
+                if let Some((k, v)) = define.split_once('=') {
+                    build.set(k, v);
+                } else {
+                    build.set(&define, "");
+                }
+            }
+
             build.build(&burtfile, target)?;
 
             if export_artifacts {
@@ -87,11 +100,11 @@ fn main() -> anyhow::Result<()> {
 
     let burtfile = read_burt_file(&args.file)?; 
     match args.command {
-        Command::Build(build_args) => build_targets(burtfile, build_args.targets, args.artifact),
+        Command::Build(build_args) => build_targets(burtfile, build_args.targets, args.artifact, args.define),
         Command::TopDefault(mut build_args) => {
             build_args.insert(0, OsString::new());
             let build_args = BuildArgs::parse_from(build_args);
-            build_targets(burtfile, build_args.targets, args.artifact)
+            build_targets(burtfile, build_args.targets, args.artifact, args.define)
         },
         Command::InternalContainerCopy { src, dest } => {
             builder::perform_container_copy(&src, &dest)

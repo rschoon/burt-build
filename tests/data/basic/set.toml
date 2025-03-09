@@ -1,0 +1,19 @@
+[[run]]
+args = ["-a", "+value"]
+verify_files = { "set.txt" = "set-1.txt" }
+
+[[run]]
+args = ["-a", "-D", "v1=z", "+value"]
+verify_files = { "set.txt" = "set-2.txt" }
+
+[[run]]
+args = ["-a", "-Dv1=z", "+value"]
+verify_files = { "set.txt" = "set-2.txt" }
+
+[[run]]
+args = ["-a", "--define", "v1=z", "+value"]
+verify_files = { "set.txt" = "set-2.txt" }
+
+[[run]]
+args = ["-a", "--define", "v2=hi", "--define", "v3=never", "+value"]
+verify_files = { "set.txt" = "set-3.txt" }

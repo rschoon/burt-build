@@ -1,0 +1,9 @@
+
+value:
+    ARG v1
+    ARG v2=a
+    FROM debian:stable
+    SET v3=b
+    SET v4={{v1}}{{v2}}{{v3}}
+    RUN echo "{{v4}}" > /set.txt
+    SAVE ARTIFACT /set.txt

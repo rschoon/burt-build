@@ -36,6 +36,10 @@ impl Build {
         }
     }
 
+    pub fn set(&mut self, name: &str, value: &str) {
+        self.environment.set(name.to_owned(), value);
+    }
+
     pub fn export_artifact<P: AsRef<Path>>(&mut self, path: P) -> anyhow::Result<()> {
         self.artifact_output.export(path.as_ref())
     }
@@ -56,6 +60,7 @@ impl Build {
             Command::Run(r) => self.cmd_run(r),
             Command::WorkDir(w) => self.cmd_work_dir(w),
             Command::SaveArtifact(c) => self.cmd_save(c),
+            Command::Set(s) => self.cmd_set(s),
         }?;
 
         Ok(())
@@ -102,6 +107,21 @@ impl Build {
         let src = self.environment.render(&r.src)?;
         let dest = r.dest.as_deref().map(|p| self.environment.render(p)).transpose()?;
         self.artifact_output.save(container, &src, dest.as_deref().unwrap_or("/"))?;
+        Ok(())
+    }
+    
+    fn cmd_set(&mut self, s: &crate::file::SetCommand) -> Result<(), anyhow::Error> {
+        if s.default && self.environment.is_set(&s.name) {
+            return Ok(())
+        }
+        
+        if let Some(v) = s.value.as_deref() {
+            let value = self.environment.render(&v)?;
+            self.environment.set(s.name.clone(), value);
+        } else {
+            self.environment.set(s.name.clone(), minijinja::Value::default());
+        }
+
         Ok(())
     }
 }

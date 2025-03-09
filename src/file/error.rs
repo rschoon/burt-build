@@ -7,7 +7,12 @@ pub struct ParseError<I> {
 
 impl<I: Display + Debug> ParseError<I> {
     pub fn extract_error(self, input: &str) -> anyhow::Error {
-        let (line, column) = find_position(input, "");
+        let pos = if let Some(e) = self.errors.get(0) {
+            e.0.to_string()
+        } else {
+            String::new()
+        };
+        let (line, column) = find_position(input, &pos);
         anyhow::anyhow!("line {line}:{column}: {}", self)
     }
 

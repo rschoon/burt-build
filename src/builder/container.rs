@@ -5,7 +5,6 @@ use std::process::{Command, Stdio};
 
 pub struct Container {
     container: String,
-    // ui: Ui
 }
 
 impl Container {
@@ -68,6 +67,24 @@ impl Container {
         child.wait()?;
 
         Ok(())
+    }
+}
+
+impl Drop for Container {
+    fn drop(&mut self) {
+        let _ = delete_container(&self.container);
+    }
+}
+
+fn delete_container(name: &str) -> anyhow::Result<()> {
+    let status = Command::new("buildah")
+        .arg("rm")
+        .arg(name)
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        anyhow::bail!("Delete container {} failed", name)
     }
 }
 

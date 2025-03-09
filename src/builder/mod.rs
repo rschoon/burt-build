@@ -1,7 +1,6 @@
 
-use std::path::Path;
-
-use container::Container;
+use base64::prelude::*;
+use std::{borrow::Cow, ffi::OsStr, path::Path};
 
 use crate::file::{Command, RootSection};
 
@@ -9,12 +8,17 @@ mod artifact;
 mod container;
 mod template;
 
+use container::Container;
+
 pub(crate) use container::{perform_container_copy, perform_container_export};
 
 macro_rules! ensure_container {
     ($b:expr) => {
         if let Some(c) = $b.container.as_ref() {
             c
+        } else if let Some(s) = $b.container_src.as_ref() {
+            $b.container = Some(Container::create(&s.from)?);
+            $b.container.as_ref().unwrap()
         } else {
             return Err(anyhow::anyhow!("No container"));
         }
@@ -22,6 +26,7 @@ macro_rules! ensure_container {
 }
 
 pub struct Build {
+    container_src: Option<ContainerSrc>,
     container: Option<container::Container>,
     artifact_output: artifact::ArtifactStore,
     environment: template::Environment
@@ -30,6 +35,7 @@ pub struct Build {
 impl Build {
     pub fn new() -> Self {
         Self {
+            container_src: None,
             container: None,
             artifact_output: artifact::ArtifactStore::default(),
             environment: template::Environment::new()
@@ -54,6 +60,36 @@ impl Build {
         Ok(())
     }
 
+    fn track_changes<F, T, K>(&mut self, key: K, func: F) -> anyhow::Result<T>
+    where 
+        F: FnOnce(&Container) -> anyhow::Result<T>,
+        K: ToString
+    {
+        use sha2::Digest;
+    
+        let Some(parent) = self.container_src.as_ref() else {
+            return Err(anyhow::anyhow!("No container from"));
+        };
+    
+        let mut combine_key = sha2::Sha256::new();
+        combine_key.update(parent.key.as_bytes());
+        combine_key.update(b"\0");
+        combine_key.update(key.to_string().as_bytes());
+        let combine_key = format!("burt-{}", BASE64_STANDARD.encode(combine_key.finalize()));
+
+        // TODO: search history
+    
+        let container = Container::create(&parent.from)?;
+        let rv = func(&container);
+    
+        if rv.is_ok() {
+            self.container_src = Some(container.commit(combine_key)?);
+        }
+        self.container = Some(container);
+        
+        rv
+    }
+
     fn build_command(&mut self, cmd: &Command) -> anyhow::Result<()> {
         match cmd {
             Command::From(f) => self.cmd_from(f),
@@ -68,38 +104,43 @@ impl Build {
 
     fn cmd_from(&mut self, f: &crate::file::FromCommand) -> anyhow::Result<()> {
         let src = self.environment.render(&f.src)?;
-        self.container = Some(Container::create(&src)?);
+        self.container_src = Some(ContainerSrc::from(src)?);
         Ok(())
     }
 
     fn cmd_run(&mut self, r: &crate::file::RunCommand) -> anyhow::Result<()> {
-        let container = ensure_container!(self);
-
-        let mut cmd = container.run();
-        cmd = match &r.cmd {
+        let cmd_args: Vec<Cow<'_, str>> = match &r.cmd {
             crate::file::RunCommandArgs::List(args) => {
-                let args = args.iter().map(|a| self.environment.render(a)).collect::<Result<Vec<_>, _>>()?;
-                cmd.args(args)
+                args.iter().map(|a| self.environment.render(a).map(Cow::Owned)).collect::<Result<Vec<_>, _>>()?
             },
             crate::file::RunCommandArgs::String(script) => {
                 let script = self.environment.render(script)?;
-                cmd.arg("/bin/sh").arg("-c").arg(script)
+                vec!["/bin/sh".into(), "-c".into(), script.into()]
             }
         };
 
-        let result = cmd.status()?;
-        if !result.success() {
-            Err(anyhow::anyhow!("{}", result.code().unwrap_or(-1)))
-        } else {
-            Ok(())
-        }
+        let key = cmd_args.join("\0");
+        self.track_changes(
+            format!("cmd:{key}"),
+            move |c| {
+                let cmd = c.run()
+                    .args(cmd_args.iter().map(|a| OsStr::new(a.as_ref())));
+        
+                let result = cmd.status()?;
+                if !result.success() {
+                    Err(anyhow::anyhow!("{}", result.code().unwrap_or(-1)))
+                } else {
+                    Ok(())
+                }
+            }
+        )
     }
 
     fn cmd_work_dir(&mut self, r: &crate::file::WorkDirCommand) -> anyhow::Result<()> {
-        let container = ensure_container!(self);
         let path = self.environment.render(&r.path)?;
-        container.set_work_dir(Path::new(&path))?;
-        Ok(())
+        self.track_changes(format!("workdir:{}", &path), move |c| {
+            c.set_work_dir(Path::new(&path))
+        })
     }
 
     fn cmd_save(&mut self, r: &crate::file::SaveArtifactCommand) -> anyhow::Result<()> {
@@ -125,3 +166,20 @@ impl Build {
         Ok(())
     }
 }
+
+struct ContainerSrc {
+    from: String,
+    key: String
+}
+
+impl ContainerSrc {
+    fn from(name: String) -> anyhow::Result<Self> {
+        let key = container::fetch_image(&name)?;
+        Ok(Self {
+            from: name,
+            key: format!("from-{key}")
+        })
+    }
+}
+
+

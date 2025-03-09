@@ -2,7 +2,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-
 pub struct Container {
     container: String,
 }
@@ -13,6 +12,24 @@ impl Container {
         let container = String::from_utf8(out.stdout.trim_ascii_end().to_vec())?;
         Ok(Self {
             container
+        })
+    }
+
+    pub fn commit(&self, key: String) -> anyhow::Result<super::ContainerSrc> {
+        Command::new("buildah")
+            .arg("config")
+            .arg("--created-by").arg(&key)
+            .arg("--label").arg(format!("burt.key={key}"))
+            .arg(&self.container)
+            .status()?;
+
+        let out = Command::new("buildah")
+            .arg("commit")
+            .arg(&self.container)
+            .output()?;
+        Ok(super::ContainerSrc {
+            from: String::from_utf8(out.stdout.trim_ascii_end().to_vec())?,
+            key
         })
     }
 
@@ -93,6 +110,7 @@ pub struct CommandRun {
 }
 
 impl CommandRun {
+    #[allow(dead_code)]
     pub fn arg<S>(mut self, arg: S) -> Self
     where
         S: std::convert::AsRef<std::ffi::OsStr>,
@@ -168,5 +186,14 @@ pub(crate) fn perform_container_export(path: &Path) -> Result<(), anyhow::Error>
     tarb.append_dir_all("", prefix)?;
     tarb.finish()?;
     Ok(())
+}
+
+pub(crate) fn fetch_image(name: &str) -> anyhow::Result<String> {
+    let out = Command::new("buildah")
+        .arg("pull")
+        .arg(name)
+        .output()?;
+    
+    Ok(String::from_utf8(out.stdout.trim_ascii_end().to_vec())?)
 }
 

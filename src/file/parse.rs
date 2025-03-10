@@ -4,7 +4,7 @@ use nom::bytes::complete::{escaped_transform, is_a, tag, take_until, take_while1
 use nom::character::complete::{alpha1, alphanumeric1, char, line_ending, multispace0, not_line_ending};
 use nom::combinator::{all_consuming, cut, eof, opt, recognize, value};
 use nom::error::context;
-use nom::multi::{many0_count, many1, many1_count, separated_list0, separated_list1};
+use nom::multi::{many0_count, many1, many1_count, many_m_n, separated_list0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Finish, IResult, Parser as _};
 
@@ -167,6 +167,22 @@ fn parse_set_command(input: &str) -> ParseResult<SetCommand> {
     }).parse(input)
 }
 
+fn parse_copy_command(input: &str) -> ParseResult<CopyCommand> {
+    let options = alt((
+        string_list,
+        many_m_n(2, usize::MAX, json_string)
+    ));
+
+    command(tag("COPY"),options).map(|mut copy| {
+        let dest = copy.pop().unwrap_or_else(String::new);
+        CopyCommand {
+            src: copy,
+            dest
+        }
+    }).parse(input)
+
+}
+
 fn parse_save_artifact_command(input: &str) -> ParseResult<SaveArtifactCommand> {
     let cmd_prefix = (tag("SAVE"), space1, tag("ARTIFACT"));
     let args = (arg_string, opt(preceded(space1, arg_string)));
@@ -194,6 +210,7 @@ fn parse_target_command(input: &str) -> ParseResult<Command> {
             cmd!(Set(SetCommand), parse_set_command),
             cmd!(WorkDir(WorkDirCommand), parse_workdir_command),
             cmd!(SaveArtifact(SaveArtifactCommand), parse_save_artifact_command),
+            cmd!(Copy(CopyCommand), parse_copy_command)
         )))
     ).parse(input)
 }

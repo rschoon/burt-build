@@ -1,5 +1,6 @@
 
 use base64::prelude::*;
+use sha2::Digest;
 use std::{borrow::Cow, ffi::OsStr, path::Path};
 
 use crate::file::{Command, RootSection};
@@ -7,10 +8,15 @@ use crate::file::{Command, RootSection};
 mod artifact;
 mod container;
 mod template;
+mod hashfile;
 
 use container::Container;
 
-pub(crate) use container::{perform_container_copy, perform_container_export};
+pub(crate) use container::{
+    perform_container_copy,
+    perform_container_export,
+    perform_container_import_tar
+};
 
 macro_rules! ensure_container {
     ($b:expr) => {
@@ -64,9 +70,7 @@ impl Build {
     where 
         F: FnOnce(&Container) -> anyhow::Result<T>,
         K: ToString
-    {
-        use sha2::Digest;
-    
+    {    
         let Some(parent) = self.container_src.as_ref() else {
             return Err(anyhow::anyhow!("No container from"));
         };
@@ -77,11 +81,11 @@ impl Build {
         combine_key.update(key.to_string().as_bytes());
         let combine_key = format!("burt-{}", BASE64_STANDARD.encode(combine_key.finalize()));
 
-        // TODO: search history
-    
-        let container = Container::create(&parent.from)?;
+        let src = container::get_cached_image(&combine_key);
+        let src = src.as_deref().unwrap_or(&parent.from);
+        let container = Container::create(src)?;
         let rv = func(&container);
-    
+
         if rv.is_ok() {
             self.container_src = Some(container.commit(combine_key)?);
         }
@@ -97,6 +101,7 @@ impl Build {
             Command::WorkDir(w) => self.cmd_work_dir(w),
             Command::SaveArtifact(c) => self.cmd_save(c),
             Command::Set(s) => self.cmd_set(s),
+            Command::Copy(c) => self.cmd_copy(c),
         }?;
 
         Ok(())
@@ -164,6 +169,26 @@ impl Build {
         }
 
         Ok(())
+    }
+
+    fn cmd_copy(&mut self, c: &crate::file::CopyCommand) -> anyhow::Result<()> {
+        let mut tarfile = tar::Builder::new(hashfile::HashedFile::new(tempfile::tempfile()?));
+
+        let dest = self.environment.render(&c.dest)?;
+        for inp in &c.src {
+            let inp = self.environment.render(inp)?;
+            tarfile.append_path(inp)?;
+        }
+
+        tarfile.finish()?;
+        let (tarfile, hash) = tarfile.into_inner()?.finish()?;
+
+        self.track_changes(
+            format!("copy-tar:{}:{}", BASE64_STANDARD.encode(hash), dest),
+            move |c| {
+                c.import_tar(tarfile, &dest)
+            }
+        )
     }
 }
 

@@ -85,6 +85,24 @@ impl Container {
 
         Ok(())
     }
+
+    pub fn import_tar<P>(&self, tarfile: std::fs::File, dest: P) -> anyhow::Result<()>
+    where 
+        P: AsRef<Path>,
+    {
+        let burt = crate::current_exe();
+        Command::new("buildah")
+            .arg("unshare")
+            .arg("-m").arg(format!("PREFIX={}", &self.container))
+            .arg("--")
+            .arg(burt)
+            .arg("internal-import")
+            .arg(dest.as_ref())
+            .stdin(tarfile)
+            .status()?;
+
+        Ok(())
+    }
 }
 
 impl Drop for Container {
@@ -188,6 +206,16 @@ pub(crate) fn perform_container_export(path: &Path) -> Result<(), anyhow::Error>
     Ok(())
 }
 
+pub(crate) fn perform_container_import_tar<R>(reader: R, path: &Path) -> Result<(), anyhow::Error>
+where 
+    R: std::io::Read
+{
+    let prefix = internal_container_path("PREFIX", path);
+    let mut tarf = tar::Archive::new(reader);
+    tarf.unpack(prefix)?;
+    Ok(())
+}
+
 pub(crate) fn fetch_image(name: &str) -> anyhow::Result<String> {
     let out = Command::new("buildah")
         .arg("pull")
@@ -197,3 +225,18 @@ pub(crate) fn fetch_image(name: &str) -> anyhow::Result<String> {
     Ok(String::from_utf8(out.stdout.trim_ascii_end().to_vec())?)
 }
 
+pub(crate) fn get_cached_image(key: &str) -> Option<String> {
+    #[derive(serde::Deserialize)]
+    struct Image {
+        image: String
+    }
+
+    let out = Command::new("buildah")
+        .arg("images")
+        .arg("--json")
+        .arg("--filter")
+        .arg(format!("label=burt.key={key}"))
+        .output().ok()?;
+    let images: Vec<Image> = serde_json::from_slice(&out.stdout).ok()?;
+    images.into_iter().next().map(|i| i.image)
+}

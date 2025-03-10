@@ -59,6 +59,10 @@ enum Command {
     InternalExport {
         path: PathBuf,
     },
+    #[clap(hide(true))]
+    InternalImportTar {
+        path: PathBuf,
+    },
     // alias for build
     #[clap(external_subcommand)]
     TopDefault(Vec<OsString>)
@@ -111,6 +115,9 @@ fn main() -> anyhow::Result<()> {
         },
         Command::InternalExport { path } => {
             builder::perform_container_export(&path)
+        },
+        Command::InternalImportTar { path } => {
+            builder::perform_container_import_tar(std::io::stdin().lock(), &path)
         }
     }
 }

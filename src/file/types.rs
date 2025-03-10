@@ -18,6 +18,7 @@ pub enum Command {
     WorkDir(WorkDirCommand),
     SaveArtifact(SaveArtifactCommand),
     Set(SetCommand),
+    Copy(CopyCommand),
 }
 
 #[derive(Debug)]
@@ -53,3 +54,10 @@ pub struct SaveArtifactCommand {
     pub src: String,
     pub dest: Option<String>,
 }
+
+#[derive(Debug)]
+pub struct CopyCommand {
+    pub src: Vec<String>,
+    pub dest: String,
+}
+

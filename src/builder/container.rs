@@ -96,7 +96,7 @@ impl Container {
             .arg("-m").arg(format!("PREFIX={}", &self.container))
             .arg("--")
             .arg(burt)
-            .arg("internal-import")
+            .arg("internal-import-tar")
             .arg(dest.as_ref())
             .stdin(tarfile)
             .status()?;

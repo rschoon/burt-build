@@ -2,6 +2,7 @@
 use base64::prelude::*;
 use sha2::Digest;
 use std::{borrow::Cow, ffi::OsStr, path::Path};
+use std::io::{self, Seek};
 
 use crate::file::{Command, RootSection};
 
@@ -181,8 +182,9 @@ impl Build {
         }
 
         tarfile.finish()?;
-        let (tarfile, hash) = tarfile.into_inner()?.finish()?;
+        let (mut tarfile, hash) = tarfile.into_inner()?.finish()?;
 
+        tarfile.seek(io::SeekFrom::Start(0))?;
         self.track_changes(
             format!("copy-tar:{}:{}", BASE64_STANDARD.encode(hash), dest),
             move |c| {

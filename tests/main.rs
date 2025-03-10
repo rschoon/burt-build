@@ -8,7 +8,14 @@ use std::{collections::HashMap, io::Read, path::{Path, PathBuf}, process::Comman
 
 #[derive(Debug, Deserialize)]
 struct TestData {
+    #[serde(default)]
+    setup: TestSetup,
     run: Vec<TestRun>
+}
+
+#[derive(Default, Debug, Deserialize)]
+struct TestSetup {
+    files: Vec<PathBuf>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -29,13 +36,14 @@ fn show_file(path: &Path) {
     };
     let mut buffer = String::new();
     f.read_to_string(&mut buffer).unwrap();
-    eprintln!("{:?}", buffer);
+    eprintln!("{}: {:?}", path.display(), buffer);
 }
 
 #[rstest]
 fn main(
     #[files("tests/data/**/*.toml")] path: PathBuf
 ) {
+    let parent = path.parent().unwrap();
     let burt_name = {
         let mut b = path.clone();
         b.set_extension("burt");
@@ -51,6 +59,10 @@ fn main(
     if burt_name.exists() {
         let burt_filename = temp_dir.path().join("build.burt");
         std::fs::copy(burt_name, burt_filename).unwrap();
+    }
+
+    for add_file in &test.setup.files {
+        std::fs::copy(parent.join(add_file), temp_dir.path().join(add_file)).unwrap();
     }
 
     if test.run.is_empty() {

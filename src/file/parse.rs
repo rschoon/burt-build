@@ -4,7 +4,7 @@ use nom::bytes::complete::{escaped_transform, is_a, tag, take_until, take_while1
 use nom::character::complete::{alpha1, alphanumeric1, char, line_ending, multispace0, not_line_ending};
 use nom::combinator::{all_consuming, cut, eof, opt, recognize, value};
 use nom::error::context;
-use nom::multi::{many0_count, many1, many1_count, many_m_n, separated_list0, separated_list1};
+use nom::multi::{many0_count, many1, many1_count, separated_list0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Finish, IResult, Parser as _};
 
@@ -94,7 +94,7 @@ fn json_string(input: &str) -> ParseResult<String> {
 }
 
 fn arg_string(input: &str) -> ParseResult<String> {
-    alt((json_string, not_whitespace1.map(|s| s.to_owned()))).parse(input)
+    alt((json_string, jinja_nonspace.map(ToOwned::to_owned))).parse(input)
 }
 
 fn string_list(input: &str) -> ParseResult<Vec<String>> {
@@ -170,8 +170,14 @@ fn parse_set_command(input: &str) -> ParseResult<SetCommand> {
 fn parse_copy_command(input: &str) -> ParseResult<CopyCommand> {
     let options = alt((
         string_list,
-        many_m_n(2, usize::MAX, json_string)
-    ));
+        separated_list1(space1, arg_string)
+    )).map_res(|s| {
+        if s.len() >= 2 {
+            Ok(s)
+        } else {
+            Err("incorrect number of arguments")
+        }
+    });
 
     command(tag("COPY"),options).map(|mut copy| {
         let dest = copy.pop().unwrap_or_else(String::new);
@@ -180,7 +186,6 @@ fn parse_copy_command(input: &str) -> ParseResult<CopyCommand> {
             dest
         }
     }).parse(input)
-
 }
 
 fn parse_save_artifact_command(input: &str) -> ParseResult<SaveArtifactCommand> {

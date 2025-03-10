@@ -1,0 +1,6 @@
+[setup]
+files = ["copy.txt"]
+
+[[run]]
+args = ["-a", "+copy-test"]
+verify_files = { "hello.txt" = "hello.txt" }

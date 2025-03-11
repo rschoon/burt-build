@@ -1,0 +1,4 @@
+[[run]]
+args = ["+invalid"]
+status_code = 1
+stderr_contains = ["line 3: expected WORKDIR path"]

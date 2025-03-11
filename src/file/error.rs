@@ -12,8 +12,8 @@ impl<I: Display + Debug> ParseError<I> {
         } else {
             String::new()
         };
-        let (line, column) = find_position(input, &pos);
-        anyhow::anyhow!("line {line}:{column}: {}", self)
+        let (line, _column) = find_position(input, &pos);
+        anyhow::anyhow!("line {line}: {}", self)
     }
 
     fn find_context(&self) -> Option<&'static str> {
@@ -37,6 +37,7 @@ impl<T: Display + Debug> std::error::Error for ParseError<T> {}
 
 impl<T: Display + Debug> Display for ParseError<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        dbg!(self);
         if let Some(c) = self.find_context() {
             write!(f, "expected {c}")
         } else if let Some(e) = self.errors.first() {

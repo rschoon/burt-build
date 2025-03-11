@@ -23,6 +23,7 @@ struct TestSetup {
 struct TestRun {
     args: Vec<String>,
     status_code: i32,
+    stderr_contains: Vec<String>,
     verify_files: HashMap<PathBuf, PathBuf>,
 }
 
@@ -73,8 +74,11 @@ fn main(
         let mut command = Command::cargo_bin("burt").unwrap();
         command.args(&run.args);
         command.current_dir(temp_dir.path());
-        let cmd_assert = command.assert();
-        cmd_assert.code(predicate::eq(run.status_code));
+        let mut cmd_assert = command.assert().code(predicate::eq(run.status_code));
+
+        for s in &run.stderr_contains {
+            cmd_assert = cmd_assert.stderr(predicate::str::contains(s));
+        }
 
         for (result_name, expect_name) in &run.verify_files {
             let expect_file = path.parent().unwrap().join(expect_name);

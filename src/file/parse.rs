@@ -106,17 +106,19 @@ fn string_list(input: &str) -> ParseResult<Vec<String>> {
     ))).parse(input)
 }
 
-fn command<'a, C, A, R1, R2>(cmd: C, args: A) -> impl nom::Parser<&'a str, Output=R2, Error=ParseError<&'a str>>
+fn command<'a, C, A, R1, R2>(ctx: &'static str, cmd: C, args: A) -> impl nom::Parser<&'a str, Output=R2, Error=ParseError<&'a str>>
 where 
     C: nom::Parser<&'a str, Output=R1, Error=ParseError<&'a str>>,
     A: nom::Parser<&'a str, Output=R2, Error=ParseError<&'a str>>,
+    R2: std::fmt::Debug
 {
     let cmd = (cmd, space1);
-    delimited(cmd, cut(args), nl)
+    let args = terminated(args, nl);
+    preceded(cmd, cut(context(ctx, args)))
 }
 
 fn parse_from_command(input: &str) -> ParseResult<FromCommand> {
-    command(tag("FROM"), not_whitespace1).map(|r| {
+    command("FROM image", tag("FROM"), not_whitespace1).map(|r| {
         FromCommand {
             src: r.to_owned()
         }
@@ -129,7 +131,7 @@ fn parse_run_command(input: &str) -> ParseResult<RunCommand> {
         command_string.map(|r| RunCommandArgs::String(r.to_owned()))
     ));
 
-    command(tag("RUN"),options).map(|cmd| {
+    command("RUN args", tag("RUN"),options).map(|cmd| {
         RunCommand {
             cmd
         }
@@ -137,18 +139,18 @@ fn parse_run_command(input: &str) -> ParseResult<RunCommand> {
 }
 
 fn parse_workdir_command(input: &str) -> ParseResult<WorkDirCommand> {
-    command(tag("WORKDIR"), jinja_nonspace).map(|r| {
+    dbg!(command("WORKDIR path", tag("WORKDIR"), jinja_nonspace).map(|r| {
         WorkDirCommand {
             path: r.to_string()
         }
-    }).parse(input)
+    }).parse(input))
 }
 
 fn parse_arg_command(input: &str) -> ParseResult<SetCommand> {
     let value = preceded(tag("="), jinja_nonspace);
     let args = (var_name, opt(value));
 
-    command(tag("ARG"), args).map(|r| {
+    command("ARG name=value ...", tag("ARG"), args).map(|r| {
         SetCommand {
             name: r.0.to_owned(),
             value: r.1.map(|s| s.to_owned()),
@@ -158,7 +160,7 @@ fn parse_arg_command(input: &str) -> ParseResult<SetCommand> {
 }
 
 fn parse_set_command(input: &str) -> ParseResult<SetCommand> {
-    command(tag("SET"), (var_name, tag("="), jinja_nonspace)).map(|r| {
+    command("SET name=value ...", tag("SET"), (var_name, tag("="), jinja_nonspace)).map(|r| {
         SetCommand {
             name: r.0.to_owned(),
             value: Some(r.2.to_owned()),
@@ -179,7 +181,7 @@ fn parse_copy_command(input: &str) -> ParseResult<CopyCommand> {
         }
     });
 
-    command(tag("COPY"),options).map(|mut copy| {
+    command("COPY src... dest", tag("COPY"), options).map(|mut copy| {
         let dest = copy.pop().unwrap_or_else(String::new);
         CopyCommand {
             src: copy,
@@ -192,7 +194,7 @@ fn parse_save_artifact_command(input: &str) -> ParseResult<SaveArtifactCommand> 
     let cmd_prefix = (tag("SAVE"), space1, tag("ARTIFACT"));
     let args = (arg_string, opt(preceded(space1, arg_string)));
 
-    command(cmd_prefix, args).map(|r| {
+    command("SAVE ARTIFACT paths...", cmd_prefix, args).map(|r| {
         SaveArtifactCommand {
             src: r.0,
             dest: r.1,

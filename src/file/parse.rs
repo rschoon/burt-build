@@ -118,9 +118,18 @@ where
 }
 
 fn parse_from_command(input: &str) -> ParseResult<FromCommand> {
-    command("FROM image", tag("FROM"), not_whitespace1).map(|r| {
+    let args = alt((
+        preceded(tag("+"), arg_string).map(|a| {
+            FromImage::Target(TargetRef {
+                target: a
+            })
+        }),
+        arg_string.map(FromImage::Image)
+    ));
+
+    command("FROM image", tag("FROM"), args).map(|src| {
         FromCommand {
-            src: r.to_owned()
+            src
         }
     }).parse(input)
 }

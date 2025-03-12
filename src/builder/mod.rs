@@ -4,7 +4,7 @@ use sha2::Digest;
 use std::{borrow::Cow, ffi::OsStr, path::Path};
 use std::io::{self, Seek};
 
-use crate::file::{Command, RootSection};
+use crate::file::{Command, RootSection, TargetRef};
 
 mod artifact;
 mod container;
@@ -61,7 +61,7 @@ impl Build {
         let target_def = root_config.targets.get(target).ok_or_else(|| anyhow::anyhow!("No such target"))?;
 
         for command in &target_def.commands {
-            self.build_command(command)?;
+            self.build_command(root_config, command)?;
         }
 
         Ok(())
@@ -95,9 +95,9 @@ impl Build {
         rv
     }
 
-    fn build_command(&mut self, cmd: &Command) -> anyhow::Result<()> {
+    fn build_command(&mut self, rc: &RootSection, cmd: &Command) -> anyhow::Result<()> {
         match cmd {
-            Command::From(f) => self.cmd_from(f),
+            Command::From(f) => self.cmd_from(rc, f),
             Command::Run(r) => self.cmd_run(r),
             Command::WorkDir(w) => self.cmd_work_dir(w),
             Command::SaveArtifact(c) => self.cmd_save(c),
@@ -108,8 +108,23 @@ impl Build {
         Ok(())
     }
 
-    fn cmd_from(&mut self, f: &crate::file::FromCommand) -> anyhow::Result<()> {
-        let src = self.environment.render(&f.src)?;
+    fn cmd_from(&mut self, rc: &RootSection, f: &crate::file::FromCommand) -> anyhow::Result<()> {
+        match &f.src {
+            crate::file::FromImage::Image(i) => self.cmd_from_image(i),
+            crate::file::FromImage::Target(t) => self.cmd_from_target(rc, t)
+        }
+    }
+
+    fn cmd_from_target(&mut self, rc: &RootSection, f: &TargetRef) -> anyhow::Result<()> {
+        let mut build = Build::new();
+        build.build(rc, &f.target)?;
+        self.container = build.container;
+        self.container_src = build.container_src;
+        Ok(())
+    }
+
+    fn cmd_from_image(&mut self, image: &str) -> anyhow::Result<()> {
+        let src = self.environment.render(image)?;
         self.container_src = Some(ContainerSrc::from(src)?);
         Ok(())
     }

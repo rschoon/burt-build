@@ -23,7 +23,20 @@ pub enum Command {
 
 #[derive(Debug)]
 pub struct FromCommand {
-    pub src: String,
+    pub src: FromImage,
+}
+
+#[derive(Debug)]
+pub enum FromImage {
+    Image(String),
+    Target(TargetRef),
+}
+
+#[derive(Debug)]
+pub struct TargetRef {
+    pub target: String,
+    // pub artifact: String,
+    // pub args: HashMap<String, String>
 }
 
 #[derive(Debug)]

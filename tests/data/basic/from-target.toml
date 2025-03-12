@@ -1,0 +1,3 @@
+[[run]]
+args = ["-a", "+hello"]
+verify_files = { "hello.txt" = "hello.txt" }

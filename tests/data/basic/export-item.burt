@@ -2,3 +2,8 @@ hello:
     FROM alpine:latest
     RUN echo hello > /hello.txt
     SAVE ARTIFACT /hello.txt
+
+hello-hello:
+    FROM alpine:latest
+    RUN echo hello > /hello.txt
+    SAVE ARTIFACT /hello.txt /hello/

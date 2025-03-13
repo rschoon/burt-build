@@ -1,3 +1,4 @@
+
 copy-test:
     FROM alpine:latest
     COPY copy.txt /

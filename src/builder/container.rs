@@ -179,10 +179,8 @@ pub(crate) fn perform_container_copy(src: &Path, dest: &Path) -> Result<(), anyh
     let src = internal_container_path("PREFIX_SRC", src);
     let mut dest = internal_container_path("PREFIX_DEST", dest);
 
-    if dest.as_os_str().as_encoded_bytes().ends_with(b"/") {
-        if let Some(filename) = src.file_name() {
-            dest.push(filename);
-        }
+    if let Some(filename) = src.file_name() {
+        dest.push(filename);
     }
 
     if src.is_dir() {

@@ -1,3 +1,7 @@
 [[run]]
 args = ["-a", "+hello"]
 verify_files = { "hello.txt" = "hello.txt" }
+
+[[run]]
+args = ["-a", "+hello-hello"]
+verify_files = { "hello/hello.txt" = "hello.txt" }

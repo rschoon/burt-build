@@ -148,11 +148,11 @@ fn parse_run_command(input: &str) -> ParseResult<RunCommand> {
 }
 
 fn parse_workdir_command(input: &str) -> ParseResult<WorkDirCommand> {
-    dbg!(command("WORKDIR path", tag("WORKDIR"), jinja_nonspace).map(|r| {
+    command("WORKDIR path", tag("WORKDIR"), jinja_nonspace).map(|r| {
         WorkDirCommand {
             path: r.to_string()
         }
-    }).parse(input))
+    }).parse(input)
 }
 
 fn parse_arg_command(input: &str) -> ParseResult<SetCommand> {
@@ -203,7 +203,7 @@ fn parse_save_artifact_command(input: &str) -> ParseResult<SaveArtifactCommand> 
     let cmd_prefix = (tag("SAVE"), space1, tag("ARTIFACT"));
     let args = (arg_string, opt(preceded(space1, arg_string)));
 
-    command("SAVE ARTIFACT paths...", cmd_prefix, args).map(|r| {
+    command("SAVE ARTIFACT src [dest]", cmd_prefix, args).map(|r| {
         SaveArtifactCommand {
             src: r.0,
             dest: r.1,

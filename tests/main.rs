@@ -70,12 +70,18 @@ fn main(
         panic!("No test runs defined");
     }
 
-    for run in &test.run {
+    for (idx, run) in test.run.iter().enumerate() {
+        eprintln!("--- {idx}");
+
         let mut command = Command::cargo_bin("burt").unwrap();
         command.args(&run.args);
         command.current_dir(temp_dir.path());
-        let mut cmd_assert = command.assert().code(predicate::eq(run.status_code));
+        let mut cmd_assert = command.assert();
+        
+        eprintln!("Stdout: {}", String::from_utf8_lossy(&cmd_assert.get_output().stdout));
+        eprintln!("Stderr: {}", String::from_utf8_lossy(&cmd_assert.get_output().stderr));
 
+        cmd_assert = cmd_assert.code(predicate::eq(run.status_code));
         for s in &run.stderr_contains {
             cmd_assert = cmd_assert.stderr(predicate::str::contains(s));
         }

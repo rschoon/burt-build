@@ -1,0 +1,6 @@
+[files]
+"value.txt" = "11o"
+
+[[run]]
+args = ["-a", "+value"]
+verify_files = { "value.txt" = "value.txt" }

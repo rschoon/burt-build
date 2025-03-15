@@ -1,0 +1,9 @@
+
+value:
+    FROM alpine:latest
+    SET a=1
+    SET b={{1 + a|int}}
+    SET c={{b|int + noval|default(9)}}
+    SET suffix={% if c|int is even %}e{% else %}o{% endif %}
+    RUN echo -n {{c}}{{suffix}} > /value.txt
+    SAVE ARTIFACT /value.txt

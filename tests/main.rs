@@ -10,6 +10,8 @@ use std::{collections::HashMap, io::Read, path::{Path, PathBuf}, process::Comman
 struct TestData {
     #[serde(default)]
     setup: TestSetup,
+    #[serde(default)]
+    files: HashMap<PathBuf, String>,
     run: Vec<TestRun>
 }
 
@@ -86,15 +88,26 @@ fn main(
             cmd_assert = cmd_assert.stderr(predicate::str::contains(s));
         }
 
-        for (result_name, expect_name) in &run.verify_files {
-            let expect_file = path.parent().unwrap().join(expect_name);
-            let result_file = temp_dir.path().join(result_name);
+        check_files(&path, temp_dir.path(), &run, &test);
+    }
+}
+
+fn check_files(config_path: &Path, temp_dir: &Path, run: &TestRun, test: &TestData) {
+    for (result_name, expect_name) in &run.verify_files {
+        let result_file = temp_dir.join(result_name);
+        let success = if let Some(content) = test.files.get(expect_name) {
+            let predicate_file = predicate::eq(content.as_ref()).from_file_path();
+            predicate_file.eval(result_file.as_path())
+        } else {
+            let expect_file = config_path.parent().unwrap().join(expect_name);
             let predicate_file = predicate::path::eq_file(&expect_file);
-            if !predicate_file.eval(result_file.as_path()) {
-                eprintln!("File contents {:?} and {:?} do not match!", &expect_file, &result_file);
-                show_file(&result_file);
-                panic!("Check failed!")
-            }
+            predicate_file.eval(result_file.as_path())
+        };
+
+        if !success {
+            eprintln!("File contents {:?} and {:?} do not match!", expect_name, &result_file);
+            show_file(&result_file);
+            panic!("Check failed!")
         }
     }
 }

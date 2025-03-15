@@ -20,14 +20,19 @@ fn some_space(input: &str) -> ParseResult<&str> {
     alt((is_a(" \t"), tag("\\\n"))).parse(input)
 }
 
+#[allow(dead_code)]
 fn not_whitespace1(input: &str) -> ParseResult<&str> {
     take_while1(|c: char| !c.is_ascii_whitespace()).parse(input)
+}
+
+fn not_whitespace_single(input: &str) -> ParseResult<char> {
+    nom::character::anychar.map_opt(|c| (!c.is_ascii_whitespace()).then_some(c)).parse(input)
 }
 
 fn jinja_nonspace(input: &str) -> ParseResult<&str> {
     let jinja_block1 = (tag("{{"), cut((take_until("}}"), tag("}}"))));
     let jinja_block2 = (tag("{%"), cut((take_until("%}"), tag("%}"))));
-    let any_part = alt((recognize(jinja_block1), recognize(jinja_block2), not_whitespace1));
+    let any_part = alt((recognize(jinja_block1), recognize(jinja_block2), recognize(not_whitespace_single)));
 
     recognize(many1_count(any_part)).parse(input)
 }

@@ -37,7 +37,6 @@ impl<T: Display + Debug> std::error::Error for ParseError<T> {}
 
 impl<T: Display + Debug> Display for ParseError<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        dbg!(self);
         if let Some(c) = self.find_context() {
             write!(f, "expected {c}")
         } else if let Some(e) = self.errors.first() {

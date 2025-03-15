@@ -6,3 +6,7 @@ hello:
     FROM +setup
     SAVE ARTIFACT /hello.txt
 
+from-path:
+    FROM ./from-target-2.burt+setup
+    RUN echo bye >> /hello.txt
+    SAVE ARTIFACT /hello.txt

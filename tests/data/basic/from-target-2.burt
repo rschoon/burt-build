@@ -1,0 +1,4 @@
+setup:
+    FROM alpine:latest
+    RUN echo -n hello, > /hello.txt
+

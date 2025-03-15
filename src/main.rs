@@ -1,9 +1,11 @@
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::sync::LazyLock;
 
 use anyhow::Context;
+use builder::BurtCache;
 use clap::{Parser, Subcommand};
 
 mod builder;
@@ -73,10 +75,12 @@ struct BuildArgs {
     targets: Vec<String>,  
 }
 
-fn build_targets(burtfile: file::RootSection, targets: Vec<String>, export_artifacts: bool, defines: Vec<String>) -> anyhow::Result<()> {
+fn build_targets(path: &Path, targets: Vec<String>, export_artifacts: bool, defines: Vec<String>) -> anyhow::Result<()> {
+    let burt_cache = Rc::new(BurtCache::default());
+
     for target in targets {
         if let Some(target) = target.strip_prefix('+') {
-            let mut build = builder::Build::new();
+            let mut build = builder::Build::new(burt_cache.clone());
 
             for define in &defines {
                 if let Some((k, v)) = define.split_once('=') {
@@ -86,7 +90,7 @@ fn build_targets(burtfile: file::RootSection, targets: Vec<String>, export_artif
                 }
             }
 
-            build.build(&burtfile, target)?;
+            build.build(path, target)?;
 
             if export_artifacts {
                 build.export_artifact(".")?;
@@ -102,13 +106,12 @@ fn build_targets(burtfile: file::RootSection, targets: Vec<String>, export_artif
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
-    let burtfile = read_burt_file(&args.file)?; 
     match args.command {
-        Command::Build(build_args) => build_targets(burtfile, build_args.targets, args.artifact, args.define),
+        Command::Build(build_args) => build_targets(&args.file, build_args.targets, args.artifact, args.define),
         Command::TopDefault(mut build_args) => {
             build_args.insert(0, OsString::new());
             let build_args = BuildArgs::parse_from(build_args);
-            build_targets(burtfile, build_args.targets, args.artifact, args.define)
+            build_targets(&args.file, build_args.targets, args.artifact, args.define)
         },
         Command::InternalContainerCopy { src, dest } => {
             builder::perform_container_copy(&src, &dest)

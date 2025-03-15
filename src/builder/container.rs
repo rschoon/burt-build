@@ -2,12 +2,18 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use super::ContainerSrc;
+
 pub struct Container {
     container: String,
 }
 
 impl Container {
     pub fn create(from: &str) -> anyhow::Result<Self> {
+        if from.is_empty() {
+            anyhow::bail!("Invalid image source");
+        }
+
         let out = Command::new("buildah").arg("from").arg(from).output()?;
         let container = String::from_utf8(out.stdout.trim_ascii_end().to_vec())?;
         Ok(Self {
@@ -15,7 +21,7 @@ impl Container {
         })
     }
 
-    pub fn commit(&self, key: String) -> anyhow::Result<super::ContainerSrc> {
+    pub fn commit(&self, key: String) -> anyhow::Result<ContainerSrc> {
         Command::new("buildah")
             .arg("config")
             .arg("--created-by").arg(&key)

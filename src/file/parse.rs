@@ -1,4 +1,7 @@
 
+use std::path::PathBuf;
+use std::str::FromStr;
+
 use nom::branch::alt;
 use nom::bytes::complete::{escaped_transform, is_a, tag, take_until, take_while1};
 use nom::character::complete::{alpha1, alphanumeric1, char, line_ending, multispace0, not_line_ending};
@@ -118,11 +121,18 @@ where
 }
 
 fn parse_from_command(input: &str) -> ParseResult<FromCommand> {
+    let path_no_plus = || take_until("+").and_then(jinja_nonspace);
+    let absolute_path = recognize((tag("/"), path_no_plus()));
+    let relative_path = recognize((tag("./"), path_no_plus()));
+    let path = alt((absolute_path, relative_path));
+    let target = (opt(path), preceded(tag("+"), arg_string));
+
     let args = alt((
-        preceded(tag("+"), arg_string).map(|a| {
-            FromImage::Target(TargetRef {
-                target: a
-            })
+        target.map_res(|a| {
+            Ok::<_, anyhow::Error>(FromImage::Target(TargetRef {
+                path: a.0.map(PathBuf::from_str).transpose()?,
+                target: a.1
+            }))
         }),
         arg_string.map(FromImage::Image)
     ));

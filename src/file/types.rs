@@ -1,5 +1,5 @@
 
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 #[derive(Debug)]
 pub struct RootSection {
@@ -34,6 +34,7 @@ pub enum FromImage {
 
 #[derive(Debug)]
 pub struct TargetRef {
+    pub path: Option<PathBuf>,
     pub target: String,
     // pub artifact: String,
     // pub args: HashMap<String, String>

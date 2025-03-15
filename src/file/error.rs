@@ -7,7 +7,7 @@ pub struct ParseError<I> {
 
 impl<I: Display + Debug> ParseError<I> {
     pub fn extract_error(self, input: &str) -> anyhow::Error {
-        let pos = if let Some(e) = self.errors.get(0) {
+        let pos = if let Some(e) = self.errors.first() {
             e.0.to_string()
         } else {
             String::new()

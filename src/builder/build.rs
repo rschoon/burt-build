@@ -62,7 +62,7 @@ impl Build {
     pub fn build_from_config(&mut self, root_config: &Rc<RootSection>, target: &str) -> anyhow::Result<()> {
         let target_def = root_config.targets.get(target).ok_or_else(|| anyhow::anyhow!("No such target"))?;
         for command in &target_def.commands {
-            self.build_command(&root_config, command)?;
+            self.build_command(root_config, command)?;
         }
 
         Ok(())
@@ -187,7 +187,7 @@ impl Build {
         }
         
         if let Some(v) = s.value.as_deref() {
-            let value = self.environment.render(&v)?;
+            let value = self.environment.render(v)?;
             self.environment.set(s.name.clone(), value);
         } else {
             self.environment.set(s.name.clone(), minijinja::Value::default());

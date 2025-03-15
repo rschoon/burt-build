@@ -86,7 +86,7 @@ fn build_targets(path: &Path, targets: Vec<String>, export_artifacts: bool, defi
                 if let Some((k, v)) = define.split_once('=') {
                     build.set(k, v);
                 } else {
-                    build.set(&define, "");
+                    build.set(define, "");
                 }
             }
 

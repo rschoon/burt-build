@@ -205,12 +205,12 @@ fn parse_copy_command(input: &str) -> ParseResult<CopyCommand> {
         }
     });
 
-    command("COPY src... dest", tag("COPY"), options).map(|mut copy| {
-        let dest = copy.pop().unwrap_or_else(String::new);
-        CopyCommand {
+    command("COPY src... dest", tag("COPY"), options).map_opt(|mut copy| {
+        let dest = copy.pop()?;
+        Some(CopyCommand {
             src: copy,
             dest
-        }
+        })
     }).parse(input)
 }
 

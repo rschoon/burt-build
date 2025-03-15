@@ -88,7 +88,7 @@ fn main(
             cmd_assert = cmd_assert.stderr(predicate::str::contains(s));
         }
 
-        check_files(&path, temp_dir.path(), &run, &test);
+        check_files(&path, temp_dir.path(), run, &test);
     }
 }
 

@@ -42,6 +42,13 @@ fn show_file(path: &Path) {
     eprintln!("{}: {:?}", path.display(), buffer);
 }
 
+fn list_files(path: &Path) -> impl Iterator<Item=PathBuf> {
+    let w = walkdir::WalkDir::new(path);
+    w.into_iter().filter_map(|s| {
+        s.ok().and_then(|e| (!e.file_type().is_dir()).then(|| e.into_path()))
+    })
+}
+
 #[rstest]
 fn main(
     #[files("tests/data/**/*.toml")] path: PathBuf
@@ -80,8 +87,11 @@ fn main(
         command.current_dir(temp_dir.path());
         let mut cmd_assert = command.assert();
         
+        let files: Vec<_> = list_files(temp_dir.path()).map(|p| p.display().to_string()).collect();
+
         eprintln!("Stdout: {}", String::from_utf8_lossy(&cmd_assert.get_output().stdout));
         eprintln!("Stderr: {}", String::from_utf8_lossy(&cmd_assert.get_output().stderr));
+        eprintln!("Files: {}", files.join(", "));
 
         cmd_assert = cmd_assert.code(predicate::eq(run.status_code));
         for s in &run.stderr_contains {

@@ -190,7 +190,7 @@ pub(crate) fn perform_container_copy(src: &Path, dest: &Path) -> Result<(), anyh
     }
 
     if src.is_dir() {
-        fs::remove_dir_all(&dest)?;
+        let _ = fs::remove_dir_all(&dest);
         copy_dir(&src, &dest)?;
     } else {
         if let Some(parent) = dest.parent() {

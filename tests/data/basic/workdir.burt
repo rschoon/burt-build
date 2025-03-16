@@ -1,0 +1,8 @@
+
+hello:
+    FROM alpine:latest
+    RUN mkdir /subdir
+    WORKDIR /subdir
+    RUN pwd
+    RUN echo hello > hello.txt
+    SAVE ARTIFACT /subdir

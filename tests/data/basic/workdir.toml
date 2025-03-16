@@ -1,0 +1,4 @@
+
+[[run]]
+args = ["-a", "+hello"]
+verify_files = { "subdir/hello.txt" = "hello.txt" }

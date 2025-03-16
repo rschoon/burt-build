@@ -7,3 +7,10 @@ hello-hello:
     FROM alpine:latest
     RUN echo hello > /hello.txt
     SAVE ARTIFACT /hello.txt /hello/
+
+hello-workdir:
+    FROM alpine:latest
+    RUN mkdir /subdir
+    RUN echo hello > /subdir/hello.txt
+    WORKDIR /subdir
+    SAVE ARTIFACT hello.txt

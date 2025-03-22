@@ -1,7 +1,7 @@
 
 use std::path::Path;
 
-use super::container::Container;
+use super::container::{Container, ExportDestination};
 
 #[derive(Default)]
 pub struct ArtifactStore {
@@ -21,9 +21,9 @@ impl ArtifactStore {
         Ok(self.container.as_ref().unwrap())
     }
 
-    pub fn export(&mut self, path: &Path) -> anyhow::Result<()> {
+    pub fn export(&mut self, dest: ExportDestination) -> anyhow::Result<()> {
         if let Some(container) = self.container.as_ref() {
-            container.export(Path::new("/"), path)?;
+            container.export(Path::new("/"), dest)?;
         }
 
         Ok(())

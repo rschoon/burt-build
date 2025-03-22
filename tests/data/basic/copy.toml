@@ -4,3 +4,8 @@ files = ["copy.txt"]
 [[run]]
 args = ["-a", "+copy-test"]
 verify_files = { "hello.txt" = "hello.txt" }
+
+[[run]]
+args = ["-a", "+copy-from-copy-test"]
+verify_files = { "hello.txt" = "hello.txt" }
+

@@ -4,12 +4,13 @@ use std::str::FromStr;
 
 use nom::branch::alt;
 use nom::bytes::complete::{escaped_transform, is_a, tag, take_until, take_while1};
+use nom::character::anychar;
 use nom::character::complete::{alpha1, alphanumeric1, char, line_ending, multispace0, not_line_ending};
 use nom::combinator::{all_consuming, cut, eof, opt, recognize, value};
 use nom::error::context;
 use nom::multi::{many0_count, many1, many1_count, separated_list0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
-use nom::{Finish, IResult, Parser as _};
+use nom::{Finish, IResult, Parser};
 
 use super::types::*;
 use super::error::ParseError;
@@ -26,15 +27,22 @@ fn not_whitespace1(input: &str) -> ParseResult<&str> {
 }
 
 fn not_whitespace_single(input: &str) -> ParseResult<char> {
-    nom::character::anychar.map_opt(|c| (!c.is_ascii_whitespace()).then_some(c)).parse(input)
+    anychar.map_opt(|c| (!c.is_ascii_whitespace()).then_some(c)).parse(input)
 }
 
-fn jinja_nonspace(input: &str) -> ParseResult<&str> {
+fn jinja<'a, P, R>(alt_parser: P) -> impl nom::Parser<&'a str, Output=&'a str, Error=ParseError<&'a str>>
+where 
+    P: nom::Parser<&'a str, Output=R, Error=ParseError<&'a str>>
+{
     let jinja_block1 = (tag("{{"), cut((take_until("}}"), tag("}}"))));
     let jinja_block2 = (tag("{%"), cut((take_until("%}"), tag("%}"))));
-    let any_part = alt((recognize(jinja_block1), recognize(jinja_block2), recognize(not_whitespace_single)));
+    let any_part = alt((recognize(jinja_block1), recognize(jinja_block2), recognize(alt_parser)));
 
-    recognize(many1_count(any_part)).parse(input)
+    recognize(many1_count(any_part))
+}
+
+fn jinja_nonspace(input: & str) -> ParseResult<&str> {
+    jinja(not_whitespace_single).parse(input)
 }
 
 fn space0(input: &str) -> ParseResult<&str> {
@@ -114,7 +122,32 @@ fn string_list(input: &str) -> ParseResult<Vec<String>> {
     ))).parse(input)
 }
 
-fn command<'a, C, A, R1, R2>(ctx: &'static str, cmd: C, args: A) -> impl nom::Parser<&'a str, Output=R2, Error=ParseError<&'a str>>
+fn arg_targetref(input: &str) -> ParseResult<TargetRef> {
+    let target_name = || jinja(anychar.map_opt(|c| (c.is_alphanumeric() || c == '_' || c == '-').then_some(c)));
+    let path_no_plus = || take_until("+").and_then(jinja_nonspace);
+    let absolute_path = recognize((tag("/"), path_no_plus()));
+    let relative_path = recognize((tag("./"), path_no_plus()));
+    let path = alt((absolute_path, relative_path));
+    let target = (opt(path), preceded(tag("+"), target_name()));
+
+    target.map_res(|a| {
+        Ok::<_, anyhow::Error>(TargetRef {
+            path: a.0.map(PathBuf::from_str).transpose()?,
+            target: a.1.to_owned(),
+            artifact: None,
+        })
+    }).parse(input)
+}
+
+fn arg_artifactref(input: &str) -> ParseResult<TargetRef> {
+    let artifact = preceded(tag("/"), arg_string);
+    (arg_targetref, opt(artifact)).map(|(mut r, p)| {
+        r.artifact = p;
+        r
+    }).parse(input)
+}
+
+fn command<'a, C, A, R1, R2>(ctx: &'static str, cmd: C, args: A) -> impl Parser<&'a str, Output = R2, Error = ParseError<&'a str>>
 where 
     C: nom::Parser<&'a str, Output=R1, Error=ParseError<&'a str>>,
     A: nom::Parser<&'a str, Output=R2, Error=ParseError<&'a str>>,
@@ -126,19 +159,8 @@ where
 }
 
 fn parse_from_command(input: &str) -> ParseResult<FromCommand> {
-    let path_no_plus = || take_until("+").and_then(jinja_nonspace);
-    let absolute_path = recognize((tag("/"), path_no_plus()));
-    let relative_path = recognize((tag("./"), path_no_plus()));
-    let path = alt((absolute_path, relative_path));
-    let target = (opt(path), preceded(tag("+"), arg_string));
-
     let args = alt((
-        target.map_res(|a| {
-            Ok::<_, anyhow::Error>(FromImage::Target(TargetRef {
-                path: a.0.map(PathBuf::from_str).transpose()?,
-                target: a.1
-            }))
-        }),
+        arg_targetref.map(FromImage::Target),
         arg_string.map(FromImage::Image)
     ));
 
@@ -194,24 +216,41 @@ fn parse_set_command(input: &str) -> ParseResult<SetCommand> {
 }
 
 fn parse_copy_command(input: &str) -> ParseResult<CopyCommand> {
-    let options = alt((
-        string_list,
-        separated_list1(space1, arg_string)
-    )).map_res(|s| {
-        if s.len() >= 2 {
-            Ok(s)
-        } else {
-            Err("incorrect number of arguments")
+    let copy_string_list = string_list.map_res(|mut s| {
+        if s.len() < 2 {
+            return Err("incorrect number of arguments");
         }
-    });
-
-    command("COPY src... dest", tag("COPY"), options).map_opt(|mut copy| {
-        let dest = copy.pop()?;
-        Some(CopyCommand {
-            src: copy,
+        let dest = s.pop().unwrap();
+        Ok(CopyCommand {
+            src: s.into_iter().map(CopySource::LocalPath).collect(),
             dest
         })
-    }).parse(input)
+    });
+
+    let copy_args = separated_list1(space1, arg_string).map_res(|mut s| {
+        if s.len() < 2 {
+            return Err("incorrect number of arguments");
+        }
+        let dest = s.pop().unwrap();
+
+        Ok(CopyCommand {
+            src: s.into_iter().map(|p| {
+                if let Ok(t) = arg_artifactref(&p) {
+                    CopySource::Artifact(t.1)
+                } else {
+                    CopySource::LocalPath(p)
+                }
+            }).collect(),
+            dest
+        })
+    });
+
+    let args = alt((
+        copy_string_list,
+        copy_args
+    ));
+
+    command("COPY src... dest", tag("COPY"), args).parse(input)
 }
 
 fn parse_save_artifact_command(input: &str) -> ParseResult<SaveArtifactCommand> {

@@ -12,6 +12,7 @@ use sha2::Digest;
 
 use crate::file::{Command, RootSection, TargetRef};
 
+use super::container::ExportDestination;
 use super::{artifact, container, hashfile, template};
 
 macro_rules! ensure_container {
@@ -51,7 +52,7 @@ impl Build {
     }
 
     pub fn export_artifact<P: AsRef<Path>>(&mut self, path: P) -> anyhow::Result<()> {
-        self.artifact_output.export(path.as_ref())
+        self.artifact_output.export(ExportDestination::Path(path.as_ref()))
     }
 
     pub fn build(&mut self, path: &Path, target: &str) -> anyhow::Result<()> {
@@ -103,7 +104,7 @@ impl Build {
             Command::WorkDir(w) => self.cmd_work_dir(w),
             Command::SaveArtifact(c) => self.cmd_save(c),
             Command::Set(s) => self.cmd_set(s),
-            Command::Copy(c) => self.cmd_copy(c),
+            Command::Copy(c) => self.cmd_copy(rc, c),
         }?;
 
         Ok(())
@@ -196,13 +197,35 @@ impl Build {
         Ok(())
     }
 
-    fn cmd_copy(&mut self, c: &crate::file::CopyCommand) -> anyhow::Result<()> {
+    fn cmd_copy(&mut self, rc: &Rc<RootSection>, c: &crate::file::CopyCommand) -> anyhow::Result<()> {
         let mut tarfile = tar::Builder::new(hashfile::HashedFile::new(tempfile::tempfile()?));
 
         let dest = self.environment.render(&c.dest)?;
         for inp in &c.src {
-            let inp = self.environment.render(inp)?;
-            tarfile.append_path(inp)?;
+            match inp {
+                crate::file::CopySource::LocalPath(path) => {
+                    let inp = self.environment.render(path)?;
+                    tarfile.append_path(inp)?;
+                }
+                crate::file::CopySource::Artifact(f) => {
+                    let mut writer = tarfile.into_inner()?;
+                    
+                    let mut build = Build::new(self.cache.clone());
+                    match &f.path {
+                        Some(path) => {
+                            build.build(path, &f.target)?;
+                        },
+                        None => {
+                            build.build_from_config(rc, &f.target)?;
+                        }
+                    }
+
+                    let build_container = ensure_container!(&mut build);
+                    let art_path = f.artifact.as_deref().unwrap_or("/");
+                    build_container.export(Path::new(art_path), ExportDestination::Writer(&mut writer))?;
+                    tarfile = tar::Builder::new(writer);
+                }
+            }
         }
 
         tarfile.finish()?;

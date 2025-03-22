@@ -70,7 +70,7 @@ impl Container {
         Ok(())
     }
 
-    pub fn export(&self, src: &Path, dest: &Path) -> anyhow::Result<()> {
+    pub fn export(&self, src: &Path, dest: ExportDestination)-> anyhow::Result<()> {
         let burt = crate::current_exe();
         let mut child = Command::new("buildah")
             .arg("unshare")
@@ -83,9 +83,16 @@ impl Container {
             .stdout(Stdio::piped())
             .spawn()?;
         
-        let stdout = child.stdout.take().unwrap();
-        let mut archive = tar::Archive::new(stdout);
-        archive.unpack(dest)?;
+        let mut stdout = child.stdout.take().unwrap();
+        match dest {
+            ExportDestination::Path(path) => {
+                let mut archive = tar::Archive::new(stdout);
+                archive.unpack(path)?;
+            }
+            ExportDestination::Writer(w) => {
+                std::io::copy(&mut stdout, w)?;
+            }
+        }
 
         child.wait()?;
 
@@ -155,6 +162,11 @@ impl CommandRun {
     pub fn status(mut self) -> anyhow::Result<std::process::ExitStatus> {
         Ok(self.command.status()?)
     }
+}
+
+pub enum ExportDestination<'a> {
+    Path(&'a Path),
+    Writer(&'a mut dyn std::io::Write),
 }
 
 fn copy_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> std::io::Result<()> {

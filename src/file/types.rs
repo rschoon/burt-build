@@ -36,7 +36,7 @@ pub enum FromImage {
 pub struct TargetRef {
     pub path: Option<PathBuf>,
     pub target: String,
-    // pub artifact: String,
+    pub artifact: Option<String>,
     // pub args: HashMap<String, String>
 }
 
@@ -70,8 +70,14 @@ pub struct SaveArtifactCommand {
 }
 
 #[derive(Debug)]
+pub enum CopySource {
+    LocalPath(String),
+    Artifact(TargetRef),
+}
+
+#[derive(Debug)]
 pub struct CopyCommand {
-    pub src: Vec<String>,
+    pub src: Vec<CopySource>,
     pub dest: String,
 }
 

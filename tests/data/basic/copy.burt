@@ -4,3 +4,8 @@ copy-test:
     COPY copy.txt /
     RUN echo -n h > /hello.txt && cat /copy.txt >> /hello.txt
     SAVE ARTIFACT /hello.txt
+
+copy-from-copy-test:
+    FROM alpine:latest
+    COPY +copy-test/hello.txt /
+    SAVE ARTIFACT /hello.txt

@@ -159,6 +159,10 @@ impl CommandRun {
         self
     }
 
+    pub fn output(mut self) -> anyhow::Result<Vec<u8>> {
+        Ok(self.command.output()?.stdout)
+    }
+
     pub fn status(mut self) -> anyhow::Result<std::process::ExitStatus> {
         Ok(self.command.status()?)
     }

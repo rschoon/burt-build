@@ -19,6 +19,8 @@ pub enum Command {
     SaveArtifact(SaveArtifactCommand),
     Set(SetCommand),
     Copy(CopyCommand),
+    ReadFile(ReadFileCommand),
+    ReadRun(ReadRunCommand),
 }
 
 #[derive(Debug)]
@@ -81,3 +83,14 @@ pub struct CopyCommand {
     pub dest: String,
 }
 
+#[derive(Debug)]
+pub struct ReadFileCommand {
+    pub src: String,
+    pub dest: String,
+}
+
+#[derive(Debug)]
+pub struct ReadRunCommand {
+    pub src: RunCommandArgs,
+    pub dest: String,
+}

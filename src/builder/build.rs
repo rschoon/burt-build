@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::OsStr;
-use std::io::{self, Seek};
+use std::io::{self, Read, Seek};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -105,6 +105,8 @@ impl Build {
             Command::SaveArtifact(c) => self.cmd_save(c),
             Command::Set(s) => self.cmd_set(s),
             Command::Copy(c) => self.cmd_copy(rc, c),
+            Command::ReadFile(r) => self.cmd_read_file(r),
+            Command::ReadRun(r) => self.cmd_read_run(r),
         }?;
 
         Ok(())
@@ -238,6 +240,46 @@ impl Build {
                 c.import_tar(tarfile, &dest)
             }
         )
+    }
+
+    fn cmd_read_file(&mut self, r: &crate::file::ReadFileCommand) -> anyhow::Result<()> {
+        let container = ensure_container!(self);
+        let src = self.environment.render(&r.src)?;
+
+        let mut buffer = io::Cursor::new(Vec::new());
+        container.export(Path::new(&src), ExportDestination::Writer(&mut buffer))?;
+
+        buffer.set_position(0);
+        let mut tarfile = tar::Archive::new(buffer);
+        if let Some(mut file) = tarfile.entries()?.next().and_then(|f| f.ok()) {
+            let mut value = String::new();
+            file.read_to_string(&mut value)?;
+            self.environment.set(r.dest.clone(), value);
+        }
+
+        Ok(())
+    }
+
+    fn cmd_read_run(&mut self, r: &crate::file::ReadRunCommand) -> anyhow::Result<()> {
+        let container = ensure_container!(self);
+
+        let cmd_args: Vec<Cow<'_, str>> = match &r.src {
+            crate::file::RunCommandArgs::List(args) => {
+                args.iter().map(|a| self.environment.render(a).map(Cow::Owned)).collect::<Result<Vec<_>, _>>()?
+            },
+            crate::file::RunCommandArgs::String(script) => {
+                let script = self.environment.render(script)?;
+                vec!["/bin/sh".into(), "-c".into(), script.into()]
+            }
+        };
+
+        let cmd = container.run()
+            .args(cmd_args.iter().map(|a| OsStr::new(a.as_ref())));
+        let output = cmd.output()?;
+
+        self.environment.set(r.dest.clone(), output);
+
+        Ok(())
     }
 }
 

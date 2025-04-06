@@ -171,13 +171,15 @@ fn parse_from_command(input: &str) -> ParseResult<FromCommand> {
     }).parse(input)
 }
 
-fn parse_run_command(input: &str) -> ParseResult<RunCommand> {
-    let options = alt((
+fn parse_run_command_args(input: &str) -> ParseResult<RunCommandArgs> {
+    alt((
         string_list.map(RunCommandArgs::List),
         command_string.map(|r| RunCommandArgs::String(r.to_owned()))
-    ));
+    )).parse(input)
+}
 
-    command("RUN args", tag("RUN"),options).map(|cmd| {
+fn parse_run_command(input: &str) -> ParseResult<RunCommand> {
+    command("RUN args", tag("RUN"), parse_run_command_args).map(|cmd| {
         RunCommand {
             cmd
         }
@@ -265,6 +267,24 @@ fn parse_save_artifact_command(input: &str) -> ParseResult<SaveArtifactCommand> 
     }).parse(input)
 }
 
+fn parse_read_file_command(input: &str) -> ParseResult<ReadFileCommand> {
+    command("READ FILE src INTO dest", tag("READ FILE"), (jinja_nonspace, var_name)).map(|r| {
+        ReadFileCommand {
+            src: r.0.to_owned(),
+            dest: r.1.to_owned(),
+        }
+    }).parse(input)
+}
+
+fn parse_read_run_command(input: &str) -> ParseResult<ReadRunCommand> {
+    command("READ RUN command INTO dest", tag("READ RUN"), (parse_run_command_args, var_name)).map(|r| {
+        ReadRunCommand {
+            src: r.0,
+            dest: r.1.to_owned(),
+        }
+    }).parse(input)
+}
+
 fn parse_target_command(input: &str) -> ParseResult<Command> {
     macro_rules! cmd {
         ($name:ident($type:ident), $func:path) => {
@@ -280,7 +300,9 @@ fn parse_target_command(input: &str) -> ParseResult<Command> {
             cmd!(Set(SetCommand), parse_set_command),
             cmd!(WorkDir(WorkDirCommand), parse_workdir_command),
             cmd!(SaveArtifact(SaveArtifactCommand), parse_save_artifact_command),
-            cmd!(Copy(CopyCommand), parse_copy_command)
+            cmd!(Copy(CopyCommand), parse_copy_command),
+            cmd!(ReadRun(ReadRunCommand), parse_read_run_command),
+            cmd!(ReadFile(ReadFileCommand), parse_read_file_command),
         )))
     ).parse(input)
 }
